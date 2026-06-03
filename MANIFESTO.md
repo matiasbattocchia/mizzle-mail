@@ -1,4 +1,4 @@
-# (working title) — a manifesto
+# mizzle — a manifesto
 
 > **Email is a medium, not a destination.**
 

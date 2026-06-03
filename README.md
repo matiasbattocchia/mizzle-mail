@@ -10,18 +10,15 @@ See [MANIFESTO.md](./MANIFESTO.md) for the why. This repo is the working prototy
 
 ## What it does
 
-- **A feed, not a list.** Full-bleed cards — sender, subject, body, the first real image if there is one. Scroll, graze, flick past.
-- **Everything decays.** Each message has a content-aware time-to-live; nothing lives past **7 days**:
-  - `primary 7d · updates 3d · social 1d · forums 1d · promos 1d` · OTP codes ~3h.
-  - Decay keys off the **latest** message in a thread, so an active conversation stays alive on its own — a reply resets the clock. No bonus timers, no babysitting.
-- **Two modes.** *Check* (lean back, graze) and *Write* (lean forward — only the things you flagged that still need a reply).
-- **Like = a filter, not a save.** Liking (♥) flags a thread for Write mode. It buys no time. Once you've replied (your message is the latest), it drops out of Write — a solid bubble marks "responded".
-- **Threads & reply.** Expand the whole Gmail conversation; reply inline over SMTP (it threads correctly and lands in Sent).
-- **Eject, don't hoard.** A thing worth keeping is a *payload*, not an email — so you send it to its real home and let the message decay:
-  - **Add to calendar** — opens a prefilled Google Calendar event (date auto-filled when the sender embedded `schema.org`/`.ics` event data).
-  - **Download** — the real raw message: `.eml` for one message, `.mbox` for a whole thread (opens in any mail client).
-  - **Copy to clipboard** — plain-text of the message.
-  - Ejected items are tagged with a Gmail label (`mizzle/ejected`) so the state syncs across devices.
+- 📜 Scroll your inbox like a feed — cards, not a list
+- ⏳ Everything decays — `primary 7d · updates 3d · social/forums/promos 1d · OTP ~3h`, nothing past **7 days**
+- 🔄 Replies reset the clock — active threads stay alive
+- 👀 **Check** to graze · ✍️ **Write** for what still needs a reply
+- ♥ Like = filter for Write (no extra time)
+- 💬 Inline threads + SMTP reply
+- 📅 Eject to Google Calendar · 📥 download `.eml`/`.mbox` · 📋 copy
+- 🏷️ Responded / ejected state synced via Gmail labels
+- 🔒 No OAuth, no cloud — your Gmail App Password, a local relay
 
 ## How it works
 
@@ -46,7 +43,7 @@ npm install
 
 cp .env.example .env
 #   EMAIL=you@gmail.com
-#   APP_PASSWORD=…           # Gmail → Security → App passwords (NOT your login password)
+#   APP_PASSWORD=…           # generate at https://myaccount.google.com/apppasswords (NOT your login password)
 
 npm start            # or: npm run dev   (auto-restart on changes)
 open http://localhost:4173

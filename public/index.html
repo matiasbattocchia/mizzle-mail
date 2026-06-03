@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>mizzle</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="phone">
+    <header class="top">
+      <div class="topbar">
+        <div class="brand"><b>mizzle</b><span> mail</span></div>
+        <div class="modes">
+          <button class="mode active" data-mode="check">Check</button>
+          <button class="mode" data-mode="write">Write</button>
+        </div>
+        <button class="icon-btn theme" title="Toggle light / dark" aria-label="Toggle theme"></button>
+        <button class="icon-btn refresh" title="Refresh" aria-label="Refresh"></button>
+      </div>
+      <div class="legend">primary 7d · updates 3d · social 1d · forums 1d · promos 1d · <b>mizzling to <span class="mzto">inbox</span></b></div>
+    </header>
+
+    <main id="feed" class="feed" aria-live="polite">
+      <div class="state" id="state">connecting to your inbox…</div>
+    </main>
+
+  </div>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

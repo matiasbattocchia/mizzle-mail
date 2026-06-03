@@ -1,0 +1,168 @@
+import 'dotenv/config';
+import express from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { ImapTransport, CATEGORIES } from './transport.js';
+import { decayState, humanRemaining } from './decay.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PORT = process.env.PORT || 4173;
+const SEED_DAYS = Number(process.env.SEED_DAYS || 3);
+// What to do with an email once it mizzles (decays out of the feed):
+//   inbox (default, safe no-op) | archive (out of Inbox → All Mail) | trash (recoverable ~30d)
+const MIZZLE_TO = (() => {
+  const v = (process.env.MIZZLE_TO || 'inbox').toLowerCase().replace(/[\s_-]/g, '');
+  if (v === 'trash' || v === 'delete') return 'trash';
+  if (v === 'archive' || v === 'allmail') return 'archive';
+  return 'inbox';
+})();
+
+const { EMAIL, APP_PASSWORD, IMAP_HOST = 'imap.gmail.com', IMAP_PORT = 993 } = process.env;
+if (!EMAIL || !APP_PASSWORD) {
+  console.error('Missing EMAIL or APP_PASSWORD in .env (copy from .env.example).');
+  process.exit(1);
+}
+
+// --- onboarding cutoff: anything before first run is ignored, forever ---
+const DATA = path.join(__dirname, '..', 'data');
+const STATE_FILE = path.join(DATA, 'state.json');
+function loadState() {
+  try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); }
+  catch {
+    fs.mkdirSync(DATA, { recursive: true });
+    const cutoff = new Date(Date.now() - SEED_DAYS * 86400000).toISOString();
+    const state = { firstRun: new Date().toISOString(), cutoff };
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    console.log(`first run — cutoff set to ${cutoff} (seeded ${SEED_DAYS}d back)`);
+    return state;
+  }
+}
+const state = loadState();
+
+const transport = new ImapTransport({ host: IMAP_HOST, port: Number(IMAP_PORT), user: EMAIL, pass: APP_PASSWORD });
+
+const app = express();
+app.use(express.json());
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+app.get('/api/feed', async (req, res) => {
+  try {
+    const now = Date.now();
+    const msgs = await transport.buildFeed({ cutoff: state.cutoff });
+    const feed = msgs
+      .map((m) => {
+        const decay = decayState(
+          { category: m.category, received: m.received, subject: m.subject },
+          now,
+        );
+        return {
+          ...m,
+          decay: { ...decay, human: humanRemaining(decay.remaining) },
+          avatar: m.fromDomain ? `https://www.google.com/s2/favicons?domain=${m.fromDomain}&sz=128` : null,
+        };
+      });
+    const live = feed.filter((m) => !m.decay.expired);
+
+    // mizzled items physically leave the inbox per MIZZLE_TO (default 'inbox' = no-op).
+    // Fire-and-forget so the response isn't blocked; logs what it moved.
+    if (MIZZLE_TO !== 'inbox') {
+      const goneUids = feed.filter((m) => m.decay.expired).flatMap((m) => m.uids || [m.uid]).filter(Boolean);
+      if (goneUids.length) {
+        transport.applyFate(goneUids, MIZZLE_TO)
+          .then((r) => r.moved && console.log(`mizzled ${r.moved} → ${MIZZLE_TO} (${r.target})`))
+          .catch((e) => console.error('mizzle fate:', e.message));
+      }
+    }
+    res.json({ email: EMAIL, cutoff: state.cutoff, categories: CATEGORIES, mizzleTo: MIZZLE_TO, count: live.length, feed: live });
+  } catch (err) {
+    console.error('feed error:', err.message);
+    const msg = err.authenticationFailed
+      ? 'Gmail rejected the login. Check app password, 2-Step Verification, and that IMAP is enabled.'
+      : err.message;
+    res.status(502).json({ error: msg });
+  }
+});
+
+// Full Gmail thread (All Mail, by X-GM-THRID) — lazy-loaded when expanding a thread.
+app.get('/api/thread', async (req, res) => {
+  try {
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ error: 'id required' });
+    res.json(await transport.fetchThread(id));
+  } catch (err) {
+    console.error('thread error:', err.message);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Batch thread resolution for background preloading (parallel, via the pool).
+app.get('/api/threads', async (req, res) => {
+  try {
+    const ids = String(req.query.ids || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!ids.length) return res.json({});
+    res.json(await transport.fetchThreads(ids));
+  } catch (err) {
+    console.error('threads error:', err.message);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.post('/api/seen', async (req, res) => {
+  try {
+    const { uid, uids } = req.body || {};
+    const target = uids && uids.length ? uids : uid;
+    if (!target) return res.status(400).json({ error: 'uid(s) required' });
+    await transport.markSeen(target);
+    res.json({ ok: true, target });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+app.post('/api/reply', async (req, res) => {
+  try {
+    const { uid, text } = req.body || {};
+    if (!uid || !text || !String(text).trim()) return res.status(400).json({ error: 'uid and text required' });
+    const r = await transport.sendReply({ uid, text: String(text) });
+    res.json({ ok: true, ...r });
+  } catch (err) {
+    console.error('reply error:', err.message);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Faithful download: real raw message source — .eml (single) or .mbox (thread).
+app.get('/api/download', async (req, res) => {
+  try {
+    const { id, uid, scope } = req.query;
+    if (!id && !uid) return res.status(400).json({ error: 'id or uid required' });
+    const b = await transport.downloadBundle({ threadId: id, uid, scope: scope === 'email' ? 'email' : 'thread' });
+    if (!b) return res.status(404).json({ error: 'not found' });
+    res.setHeader('Content-Type', b.mime);
+    res.setHeader('Content-Disposition', `attachment; filename="mizzle.${b.ext}"`);
+    res.send(b.content);
+  } catch (err) { console.error('download:', err.message); res.status(502).json({ error: err.message }); }
+});
+
+// Mark a thread's payload as ejected (shared / added to calendar) via Gmail label.
+app.post('/api/eject', async (req, res) => {
+  try {
+    const { uid, uids, on = true } = req.body || {};
+    const target = uids && uids.length ? uids : uid;
+    if (!target) return res.status(400).json({ error: 'uid(s) required' });
+    await transport.eject(target, on);
+    res.json({ ok: true, target, ejected: on });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+app.post('/api/keep', async (req, res) => {
+  try {
+    const { uid, on = true } = req.body || {};
+    if (!uid) return res.status(400).json({ error: 'uid required' });
+    await transport.keep(uid, on);
+    res.json({ ok: true, uid, kept: on });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+app.listen(PORT, () => {
+  console.log(`mizzle relay on http://localhost:${PORT}  (account: ${EMAIL}, cutoff: ${state.cutoff}, mizzle-to: ${MIZZLE_TO})`);
+});

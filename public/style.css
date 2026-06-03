@@ -1,0 +1,251 @@
+/* ============================================ */
+/* THEME TOKENS  (convention adopted from ../sole) */
+/* ============================================ */
+
+:root {
+  /* dark palette */
+  --d-bg:            #0a0a0c;
+  --d-bg-frame:      #000000;
+  --d-surface:       #161619;
+  --d-bg-alt:        #24242b;
+  --d-bg-glass:      rgba(10, 10, 12, 0.85);
+  --d-text-heading:  rgba(255, 255, 255, 1.00);
+  --d-text:          rgba(255, 255, 255, 0.92);
+  --d-text-secondary:rgba(255, 255, 255, 0.56);
+  --d-border:        rgba(255, 255, 255, 0.10);
+  --d-track:         rgba(255, 255, 255, 0.14);
+
+  /* light palette — white cards on a soft grey feed */
+  --l-bg:            #e9e9ee;
+  --l-bg-frame:      #d9d9e0;
+  --l-surface:       #ffffff;
+  --l-bg-alt:        #d9d9e2;
+  --l-bg-glass:      rgba(233, 233, 238, 0.85);
+  --l-text-heading:  rgba(16, 16, 20, 1.00);
+  --l-text:          rgba(16, 16, 20, 0.90);
+  --l-text-secondary:rgba(16, 16, 20, 0.54);
+  --l-border:        rgba(0, 0, 0, 0.10);
+  --l-track:         rgba(0, 0, 0, 0.12);
+
+  /* shared */
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --radius-pill: 999px;
+  --transition-base: 200ms ease;
+  --transition-slow: 500ms ease;
+  --keep: #f43f5e;
+}
+
+:root, :root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: var(--d-bg); --color-bg-frame: var(--d-bg-frame); --color-surface: var(--d-surface);
+  --color-bg-alt: var(--d-bg-alt); --color-bg-glass: var(--d-bg-glass);
+  --color-text-heading: var(--d-text-heading); --color-text: var(--d-text);
+  --color-text-secondary: var(--d-text-secondary); --color-border: var(--d-border); --color-track: var(--d-track);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --color-bg: var(--l-bg); --color-bg-frame: var(--l-bg-frame); --color-surface: var(--l-surface);
+    --color-bg-alt: var(--l-bg-alt); --color-bg-glass: var(--l-bg-glass);
+    --color-text-heading: var(--l-text-heading); --color-text: var(--l-text);
+    --color-text-secondary: var(--l-text-secondary); --color-border: var(--l-border); --color-track: var(--l-track);
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: var(--l-bg); --color-bg-frame: var(--l-bg-frame); --color-surface: var(--l-surface);
+  --color-bg-alt: var(--l-bg-alt); --color-bg-glass: var(--l-bg-glass);
+  --color-text-heading: var(--l-text-heading); --color-text: var(--l-text);
+  --color-text-secondary: var(--l-text-secondary); --color-border: var(--l-border); --color-track: var(--l-track);
+}
+
+/* ============================================ */
+/* BASE                                         */
+/* ============================================ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+html, body {
+  background: var(--color-bg-frame);
+  color: var(--color-text);
+  font: 15px/1.45 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+/* the WINDOW scrolls (scroll from anywhere) — not an inner column */
+.phone {
+  max-width: 480px; min-height: 100dvh; margin: 0 auto;
+  background: var(--color-bg); position: relative;
+  transition: background var(--transition-base);
+}
+
+/* ============================================ */
+/* HEADER                                       */
+/* ============================================ */
+
+.top {
+  padding: 14px 16px 12px; border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg); /* flows with the page (no longer sticky) */
+}
+.topbar { display: flex; align-items: center; gap: 12px; }
+.top .legend { margin-top: 11px; color: var(--color-text-secondary); font-size: 11px; line-height: 1.6; }
+.top .legend b { color: var(--color-text); font-weight: 800; }
+.brand { letter-spacing: -.02em; font-size: 19px; color: var(--color-text-heading); }
+.brand b { font-weight: 800; }
+.brand span { color: var(--color-text-secondary); font-weight: 600; }
+.modes { margin-left: auto; display: flex; background: var(--color-bg-alt); border-radius: var(--radius-pill); padding: 3px; }
+.mode {
+  border: 0; background: transparent; color: var(--color-text-secondary);
+  padding: 6px 14px; border-radius: var(--radius-pill); font-weight: 700; font-size: 13px; cursor: pointer;
+  transition: var(--transition-base);
+}
+.mode.active { background: var(--color-text-heading); color: var(--color-bg); }
+.icon-btn {
+  border: 0; background: var(--color-bg-alt); color: var(--color-text);
+  width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+  display: grid; place-items: center; transition: var(--transition-base);
+}
+.icon-btn .ic { width: 18px; height: 18px; }
+.icon-btn.syncing .ic { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================ */
+/* FEED  (free scroll, no snap)                 */
+/* ============================================ */
+
+.feed { padding-bottom: 24px; } /* normal flow — the window is the scroller */
+.state { padding: 80px 24px; text-align: center; color: var(--color-text-secondary); }
+
+.group {
+  padding: 14px 18px 4px; font-size: 12px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .1em; color: var(--color-text-secondary);
+}
+.divider { text-align: center; color: var(--color-text-secondary); font-size: 13px; font-weight: 700; padding: 20px 18px; }
+
+/* ============================================ */
+/* CARD  (discrete block, IG-style anatomy)     */
+/* ============================================ */
+
+.card {
+  position: relative; margin: 10px 12px;
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px;
+  padding: 16px 16px 18px; overflow: hidden;
+  transition: box-shadow var(--transition-base);
+}
+/* keep avatar/actions from being selected, but let the email text be copied */
+.acct, .actions, .more, .less { user-select: none; }
+.card.seen .heroimg { opacity: .6; }
+
+/* lucide icons */
+.ic { width: 20px; height: 20px; display: block; }
+
+/* header row */
+.acct { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.avatar {
+  width: 40px; height: 40px; border-radius: 50%; flex: none;
+  background: var(--color-bg-alt); object-fit: cover; border: 1px solid var(--color-border);
+}
+.avatar.mono { display: grid; place-items: center; font-weight: 800; color: #fff; font-size: 16px; }
+.who { flex: 1; min-width: 0; }
+.who .name { font-weight: 700; color: var(--color-text-heading); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who .handle { color: var(--color-text-secondary); font-size: 13px; }
+.threadcount { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--color-text-secondary); background: var(--color-bg-alt); border-radius: var(--radius-pill); padding: 2px 8px; }
+.threadcount .ic { width: 13px; height: 13px; }
+.time { color: var(--color-text-secondary); font-size: 12px; white-space: nowrap; }
+
+/* image (only present when a real one exists) */
+.heroimg { width: 100%; max-height: 240px; object-fit: cover; border-radius: 12px; margin-bottom: 12px; background: var(--color-bg-alt); display: block; }
+
+/* subject + body */
+.subject { font-size: 18px; font-weight: 800; line-height: 1.3; color: var(--color-text-heading); margin-bottom: 6px; }
+.content { color: var(--color-text-secondary); font-size: 15px; line-height: 1.55; }
+.content .body {
+  white-space: pre-wrap; word-break: break-word;           /* keep newlines (clamped to 4 lines) */
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.content.open .body { display: block; -webkit-line-clamp: unset; overflow: visible; } /* expanded: full */
+.more { background: none; border: 0; color: var(--color-text-heading); font-weight: 700; font-size: 13px; padding: 6px 0 0; cursor: pointer; }
+
+/* expanded thread — IG-comment style: "Name body", left-aligned, no bubbles */
+.thread { margin-top: 10px; display: flex; flex-direction: column; gap: 11px; }
+.tmsg { font-size: 14px; line-height: 1.55; color: var(--color-text); white-space: pre-wrap; word-break: break-word; }
+.tmsg-from { font-weight: 700; color: var(--color-text-heading); margin-right: 6px; }
+.tmsg-b { color: var(--color-text); }
+.content a, .tmsg-b a { color: inherit; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.content a:hover, .tmsg-b a:hover { color: var(--color-text-heading); }
+.less { background: none; border: 0; color: var(--color-text-heading); font-weight: 700; font-size: 13px; padding: 10px 0 0; cursor: pointer; }
+
+/* inline reply composer */
+.composer { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.composer textarea {
+  width: 100%; background: var(--color-bg); color: var(--color-text);
+  border: 1px solid var(--color-border); border-radius: 12px; padding: 10px; font: inherit; resize: vertical;
+}
+.composer .send {
+  align-self: flex-end; display: inline-flex; align-items: center; gap: 6px;
+  background: var(--color-text-heading); color: var(--color-bg);
+  border: 0; border-radius: var(--radius-pill); padding: 8px 16px; font-weight: 700; cursor: pointer;
+}
+.composer .send .ic { width: 15px; height: 15px; }
+
+/* action bar */
+.actions { display: flex; align-items: center; gap: 2px; margin-top: 14px; position: relative; }
+.act {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 0; cursor: pointer; line-height: 1;
+  padding: 8px 10px; border-radius: 10px; color: var(--color-text-secondary); transition: var(--transition-base);
+}
+.actcount { font-size: 13px; font-weight: 700; }
+.act:hover { background: var(--color-bg-alt); color: var(--color-text-heading); }
+.card.kept .star { color: var(--keep); }
+.card.kept .star .ic { fill: var(--keep); }
+/* responded = your reply is the latest message → solid grey bubble
+   (kept neutral on purpose: red heart + green globe + this would be too much color) */
+.act.reply.responded { color: var(--color-text-secondary); }
+/* ejected (shared / added to calendar) → solid icon, same neutral grey */
+.act.done { color: var(--color-text-secondary); }
+
+/* eject menu — pops UP, anchored right at the share button */
+.share-wrap { position: relative; display: inline-flex; }
+.ejectmenu {
+  position: absolute; bottom: 100%; left: 0; margin-bottom: 8px; z-index: 30;
+  background: var(--color-bg); border: 1px solid var(--color-border);
+  border-radius: 12px; box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,.18));
+  padding: 5px; min-width: 196px; display: flex; flex-direction: column;
+}
+.ejectmenu button {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  background: none; border: 0; cursor: pointer; padding: 9px 11px; border-radius: 8px;
+  color: var(--color-text); font: inherit; font-size: 14px;
+}
+.ejectmenu button:hover { background: var(--color-bg-alt); }
+.ejectmenu .ic { width: 17px; height: 17px; color: var(--color-text-secondary); flex: 0 0 auto; }
+
+/* remaining time — lives at the bottom-right of the action bar now */
+.decaytime { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 800; letter-spacing: .02em; padding-right: 4px; }
+.decaytime .ic { width: 14px; height: 14px; }
+
+/* subtle decay sliver at the card's bottom edge */
+/* full-width accent decoration at the card's bottom (NOT a progress bar) */
+.sliver { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; opacity: .9; }
+
+/* double-tap heart burst */
+.burst { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; font-size: 96px; opacity: 0; transform: scale(.4); }
+.burst.go { animation: pop .7s ease; }
+@keyframes pop {
+  0% { opacity: 0; transform: scale(.4); }
+  25% { opacity: 1; transform: scale(1.1); }
+  60% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.1); }
+}
+
+/* ============================================ */
+/* TOAST                                        */
+/* ============================================ */
+
+#toast {
+  position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%) translateY(12px);
+  background: var(--color-text-heading); color: var(--color-bg);
+  padding: 10px 16px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 600;
+  opacity: 0; pointer-events: none; transition: var(--transition-base); z-index: 20; max-width: 90%;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }

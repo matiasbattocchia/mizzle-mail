@@ -6,17 +6,6 @@
 
 See [MANIFESTO.md](./MANIFESTO.md) for the why. This repo is the working prototype.
 
----
-
-## What it does
-
-- Scroll your inbox like a feed.
-- Your email decays; nothing lasts past **7 days**.
-- Should not decay? It will. Export it to Google Calendar or download it out.
-- Two modes: **Check** to graze · **Write** when you're in the mood.
-- ♥ Like = filter for "write later".
-- No local state, everything stays synced to Gmail.
-
 <table align="center">
   <tr>
     <td><img src="./screenshots/feed.png" alt="The feed — Check mode" width="200"></td>
@@ -29,6 +18,15 @@ See [MANIFESTO.md](./MANIFESTO.md) for the why. This repo is the working prototy
     <td><img src="./screenshots/image-card.png" alt="A card with a real image" width="200"></td>
   </tr>
 </table>
+
+## What it does
+
+- Scroll your inbox like a feed.
+- Your email decays; nothing lasts past **7 days**.
+- Should not decay? It will. Export it to Google Calendar or download it out.
+- Two modes: **Check** to graze · **Write** when you're in the mood.
+- Like ❤️️ = filter for "write later".
+- No local state, everything stays synced to Gmail.
 
 ## How it works
 

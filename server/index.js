@@ -10,13 +10,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4173;
 const SEED_DAYS = Number(process.env.SEED_DAYS || 3);
 // What to do with an email once it mizzles (decays out of the feed):
-//   inbox (default, safe no-op) | archive (out of Inbox → All Mail) | trash (recoverable ~30d)
+//   inbox  (default, safe no-op)
+//   archive (out of Inbox → All Mail)
+//   trash  (→ Trash, recoverable ~30d)
+//   mixed  (touched it → archive; untouched noise → trash). "Touched" = liked, shared, or replied.
 const MIZZLE_TO = (() => {
   const v = (process.env.MIZZLE_TO || 'inbox').toLowerCase().replace(/[\s_-]/g, '');
+  if (v === 'mixed') return 'mixed';
   if (v === 'trash' || v === 'delete') return 'trash';
   if (v === 'archive' || v === 'allmail') return 'archive';
   return 'inbox';
 })();
+// an item is "kept worth archiving" if the user interacted with it at all
+const touched = (m) => !!(m.kept || m.answered || m.ejected);
 
 const { EMAIL, APP_PASSWORD, IMAP_HOST = 'imap.gmail.com', IMAP_PORT = 993 } = process.env;
 if (!EMAIL || !APP_PASSWORD) {
@@ -67,10 +73,15 @@ app.get('/api/feed', async (req, res) => {
     // mizzled items physically leave the inbox per MIZZLE_TO (default 'inbox' = no-op).
     // Fire-and-forget so the response isn't blocked; logs what it moved.
     if (MIZZLE_TO !== 'inbox') {
-      const goneUids = feed.filter((m) => m.decay.expired).flatMap((m) => m.uids || [m.uid]).filter(Boolean);
-      if (goneUids.length) {
-        transport.applyFate(goneUids, MIZZLE_TO)
-          .then((r) => r.moved && console.log(`mizzled ${r.moved} → ${MIZZLE_TO} (${r.target})`))
+      const expired = feed.filter((m) => m.decay.expired);
+      // 'mixed': touched → archive, untouched → trash. Otherwise everything to MIZZLE_TO.
+      const fateOf = (m) => (MIZZLE_TO === 'mixed' ? (touched(m) ? 'archive' : 'trash') : MIZZLE_TO);
+      const byFate = { archive: [], trash: [] };
+      for (const m of expired) byFate[fateOf(m)].push(...(m.uids || [m.uid]).filter(Boolean));
+      for (const [fate, uids] of Object.entries(byFate)) {
+        if (!uids.length) continue;
+        transport.applyFate(uids, fate)
+          .then((r) => r.moved && console.log(`mizzled ${r.moved} → ${fate} (${r.target})`))
           .catch((e) => console.error('mizzle fate:', e.message));
       }
     }

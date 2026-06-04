@@ -335,7 +335,7 @@ function calBasic(iso) { // ISO → YYYYMMDD or YYYYMMDDTHHMMSSZ
 }
 function calDateLabel(ev) {
   const d = new Date(ev.start); if (isNaN(d)) return '';
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 function calendarUrl(it) {
   const ev = it.event || {};

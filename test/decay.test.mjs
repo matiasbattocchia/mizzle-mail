@@ -17,12 +17,15 @@ test('base TTL by Gmail category', () => {
   assert.equal(ttlDays({ category: 'promotions' }), 1);
 });
 
-test('star adds +7 days, reply adds +14, and they stack', () => {
-  assert.equal(ttlDays({ category: 'primary', kept: true }), 14);            // 7 + 7
-  assert.equal(ttlDays({ category: 'primary', answered: true }), 21);        // 7 + 14
-  assert.equal(ttlDays({ category: 'primary', kept: true, answered: true }), 28); // 7 + 7 + 14
-  // bonuses apply regardless of base category
-  assert.equal(ttlDays({ category: 'promotions', kept: true }), 8);          // 1 + 7
+test('like and reply add NO time — decay is category base only, nothing past 7d', () => {
+  assert.equal(ttlDays({ category: 'primary', kept: true }), 7);
+  assert.equal(ttlDays({ category: 'primary', answered: true }), 7);
+  assert.equal(ttlDays({ category: 'primary', kept: true, answered: true }), 7);
+  assert.equal(ttlDays({ category: 'promotions', kept: true }), 1);
+  // the longest any email can live is the largest base TTL (primary = 7d)
+  const max = Math.max(...['primary', 'updates', 'social', 'forums', 'promotions']
+    .map((c) => ttlDays({ category: c, kept: true, answered: true })));
+  assert.equal(max, 7);
 });
 
 test('OTP subject short-circuits to hours regardless of category', () => {

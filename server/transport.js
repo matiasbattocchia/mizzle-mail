@@ -159,9 +159,11 @@ export class ImapTransport {
           received: head ? head.received : t.latestInbox,
           seen: !t.anyUnread, kept: t.anyKept, answered: t.anyAnswered,
           ejected: t.anyEjected, // payload exported out (Gmail label mizzle/ejected) → solid send icon
-          // "responded" = the LATEST message in the thread is mine. If they wrote back
-          // after my reply, the ball is in my court again → not responded.
-          responded: head ? !!head.fromMe : false,
+          // "responded" = a real conversation whose LATEST message is mine. Requires
+          // more than one message — a lone from-me item (e.g. a calendar/booking
+          // confirmation sent as you) isn't a reply, so it stays hollow. If they wrote
+          // back after my reply, the latest is theirs again → not responded.
+          responded: head ? (!!head.fromMe && r.count > 1) : false,
           count: r.count,
           body: head ? ((head.fromMe ? 'You: ' : '') + (head.body || '')) : '',
           image: head ? head.image : null,
@@ -454,23 +456,35 @@ function parseIcs(ics) {
   return { title: unesc(line('SUMMARY')), start: start.iso, end: end ? end.iso : null, location: unesc(line('LOCATION')), allDay: start.allDay };
 }
 
-// Best image in the HTML — skips tracking pixels/spacers, prefers a content
-// image over a header logo/icon, falls back to the logo if that's all there is.
+// Some senders embed the image size in the URL — fetch a crisp version instead of
+// the tiny thumbnail. Bandcamp: f4.bcbits.com/img/<id>_<code>.jpg → the ~700px size.
+function upscaleThumb(src) {
+  return src.replace(/(f4\.bcbits\.com\/img\/[a-z0-9]+)_\d+(\.jpg)/i, '$1_16$2');
+}
+
+const MIN_HERO = 64; // px — anything declared smaller is an icon/thumb, not a hero image
+
+// Best image in the HTML — skips tracking pixels/spacers AND tiny thumbnails,
+// prefers a content image over a header logo/icon, and upscales known size-coded
+// thumbnails. Returns null when there's nothing worth showing (better than a blurry
+// 50px thumb): a card with no real image renders clean text instead.
 function extractImage(html) {
   const tags = html.match(/<img\b[^>]*>/gi) || [];
   let fallback = null;
   for (const tag of tags) {
-    const src = (tag.match(/\bsrc\s*=\s*["']?([^"'\s>]+)/i) || [])[1];
-    if (!src || !/^https?:\/\//i.test(src)) continue;
+    const raw = (tag.match(/\bsrc\s*=\s*["']?([^"'\s>]+)/i) || [])[1];
+    if (!raw || !/^https?:\/\//i.test(raw)) continue;
+    if (/pixel|beacon|track|spacer|\/open[._-]|email[._-]?open|1x1/i.test(raw)) continue;
     const w = +((tag.match(/\bwidth\s*=\s*["']?(\d+)/i) || [])[1] || 0);
     const h = +((tag.match(/\bheight\s*=\s*["']?(\d+)/i) || [])[1] || 0);
-    if ((w && w <= 3) || (h && h <= 3)) continue;
-    if (/pixel|beacon|track|spacer|\/open[._-]|email[._-]?open|1x1/i.test(src)) continue;
+    const src = upscaleThumb(raw);
+    const upscalable = src !== raw; // we can pull a big version → declared size is irrelevant
+    if (!upscalable && ((w && w < MIN_HERO) || (h && h < MIN_HERO))) continue; // tiny → skip, try the next
     if (!fallback) fallback = src;
-    if (/logo|icon|header|footer|sprite|badge|social|facebook|twitter|instagram-glyph/i.test(src)) continue;
+    if (/logo|icon|header|footer|sprite|badge|social|facebook|twitter|instagram-glyph/i.test(raw)) continue;
     return src; // a content image
   }
-  return fallback;
+  return fallback; // may be null — no decent image, show none
 }
 
 // Deterministic event detection — read the structured event data senders already

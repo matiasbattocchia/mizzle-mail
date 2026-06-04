@@ -4,21 +4,24 @@
 //   - Reply buys NO time either — but decay keys off the LATEST message's date,
 //     so a thread that keeps getting replies stays young and naturally alive.
 //   The longest any email can live is the largest base TTL (primary, 7d).
-// Half-lives are configurable via DECAY_TTLS env (JSON, ms), e.g. {"promotions":172800000}.
+// Base lifetimes are configurable via DECAY_TTLS env (JSON, in DAYS), e.g. {"promotions":2}.
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
-const BASE_DEFAULT = {
-  primary:    7 * DAY,
-  updates:    3 * DAY,
-  social:     1 * DAY,
-  forums:     1 * DAY,
-  promotions: 1 * DAY,
+// base lifetime per Gmail category, in DAYS
+const BASE_DAYS = {
+  primary:    7,
+  updates:    3,
+  social:     1,
+  forums:     1,
+  promotions: 1,
 };
 const BASE = (() => {
-  try { return { ...BASE_DEFAULT, ...JSON.parse(process.env.DECAY_TTLS || '{}') }; }
-  catch { return { ...BASE_DEFAULT }; }
+  let override = {};
+  try { override = JSON.parse(process.env.DECAY_TTLS || '{}'); } catch { /* keep defaults */ }
+  const days = { ...BASE_DAYS, ...override };
+  return Object.fromEntries(Object.entries(days).map(([k, d]) => [k, d * DAY]));
 })();
 
 const OTP_TTL = 3 * HOUR;

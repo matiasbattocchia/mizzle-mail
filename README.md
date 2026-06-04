@@ -1,4 +1,4 @@
-# mizzle
+# Mizzle Mail
 
 **Your Gmail inbox as an ephemeral feed.** You scroll it like Instagram, act on what matters, and let the rest *mizzle* — drizzle in, then quietly vanish. Nothing accrues. The inbox is a **pipe, not a tank**.
 
@@ -10,12 +10,25 @@ See [MANIFESTO.md](./MANIFESTO.md) for the why. This repo is the working prototy
 
 ## What it does
 
-- 📜 Scroll your inbox like a feed
-- ⏳ Your email decays — nothing past **7 days**
-- 📅 Should not decay? It will — export to Google Calendar or download
-- 👀 Two modes: **Check** to graze · ✍️ **Write** when you're in the mood
-- ♥ Like = filter for write later
-- 🏷️ No state held locally, all synced to Gmail
+- Scroll your inbox like a feed.
+- Your email decays; nothing lasts past **7 days**.
+- Should not decay? It will. Export it to Google Calendar or download it out.
+- Two modes: **Check** to graze · **Write** when you're in the mood.
+- ♥ Like = filter for "write later".
+- No local state, everything stays synced to Gmail.
+
+<table align="center">
+  <tr>
+    <td><img src="./screenshots/feed.png" alt="The feed — Check mode" width="200"></td>
+    <td><img src="./screenshots/write.png" alt="Write mode — what you flagged" width="200"></td>
+    <td><img src="./screenshots/thread.png" alt="A thread with inline reply" width="200"></td>
+  </tr>
+  <tr>
+    <td><img src="./screenshots/eject.png" alt="Eject — calendar, download, or copy" width="200"></td>
+    <td><img src="./screenshots/decay.png" alt="Everything decays; caught-up divider" width="200"></td>
+    <td><img src="./screenshots/image-card.png" alt="A card with a real image" width="200"></td>
+  </tr>
+</table>
 
 ## How it works
 
@@ -32,7 +45,7 @@ test/            node --test unit tests
 
 ## Setup
 
-Requires Node 18+ and a Gmail account with **2-Step Verification** on (so you can mint an App Password).
+Requires Node 18+ and a Gmail account with **2-Step Verification** on, so you can [mint an App Password](https://myaccount.google.com/apppasswords).
 
 ```sh
 git clone https://github.com/matiasbattocchia/mizzle-mail && cd mizzle-mail
@@ -40,7 +53,7 @@ npm install
 
 cp .env.example .env
 
-npm start            # or: npm run dev   (auto-restart on changes)
+npm start
 open http://localhost:4173
 ```
 
@@ -50,16 +63,6 @@ open http://localhost:4173
 
 | Var | Default | Meaning |
 |---|---|---|
-| `EMAIL` / `APP_PASSWORD` | — | Gmail address + App Password |
-| `PORT` | `4173` | relay port |
-| `SEED_DAYS` | `3` | on first run, how far back to seed the feed; everything older is ignored forever |
-| `MIZZLE_TO` | `inbox` | what happens when a message decays out: `inbox` · `archive` (→ All Mail) · `delete` (→ Trash, recoverable ~30d) |
-| `DECAY_TTLS` | — | optional JSON to override per-category TTLs in ms, e.g. `{"promotions":172800000}` |
-
-```sh
-npm test     # run the unit tests
-```
-
-## Status
-
-Personal working prototype — built against one real Gmail account. Not packaged, not multi-user. Naming, a per-category `MIZZLE_TO` policy, and a forward action are still in flight.
+| `EMAIL` | — | your Gmail address |
+| `APP_PASSWORD` | — | a Gmail App Password (not your login password) |
+| `MIZZLE_TO` | `inbox` | what happens when a message decays out: `inbox` · `archive` (→ All Mail) · `delete` (→ Trash, recoverable ~30d) · `mixed` (touched → archive, untouched → delete) |

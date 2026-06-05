@@ -73,7 +73,7 @@ export const FIXTURES = [
   { category: 'primary', fromName: 'United Airlines', fromDomain: 'united.com',
     subject: 'Your flight UA1245 — San Francisco → New York',
     body: 'Check-in is open. Flight UA1245 departs June 10 at 8:40 AM from SFO. Arrive 2 hours early. Your boarding pass is attached.',
-    hoursAgo: 40, seen: true, ejected: true,
+    hoursAgo: 40, seen: true, shared: true,
     event: { title: 'Flight UA1245 · SFO → JFK', start: '2026-06-10T08:40:00-07:00', location: 'San Francisco Intl (SFO)', allDay: false } },
 
   // ── updates ──────────────────────────────────────────────

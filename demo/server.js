@@ -42,7 +42,7 @@ function buildFeed() {
       category: it.category, subject: it.subject, fromName: it.fromName,
       fromDomain, fromAddress: it.fromAddress || (fromDomain ? `info@${fromDomain}` : null),
       received, seen: !!it.seen, kept: !!it.kept, answered: !!it.answered,
-      responded: !!it.responded, ejected: !!it.ejected, count: it.count || 1,
+      responded: !!it.responded, shared: !!it.shared, count: it.count || 1,
       body: it.body || '', image: it.image || null, event: it.event || null,
       decay: { ...decay, human: humanRemaining(decay.remaining) }, avatar,
     };
@@ -139,7 +139,7 @@ app.get('/api/threads', (req, res) => {
 app.post('/api/seen', (req, res) => res.json({ ok: true }));
 app.post('/api/keep', (req, res) => res.json({ ok: true, kept: req.body?.on }));
 app.post('/api/reply', (req, res) => res.json({ ok: true, to: 'demo@example.com', subject: 'demo' }));
-app.post('/api/eject', (req, res) => res.json({ ok: true, ejected: true }));
+app.post('/api/share', (req, res) => res.json({ ok: true, shared: true }));
 app.get('/api/download', (req, res) => {
   res.setHeader('Content-Type', 'message/rfc822');
   res.setHeader('Content-Disposition', 'attachment; filename="demo.eml"');

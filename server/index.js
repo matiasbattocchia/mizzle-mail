@@ -22,7 +22,7 @@ const MIZZLE_TO = (() => {
   return 'inbox';
 })();
 // an item is "kept worth archiving" if the user interacted with it at all
-const touched = (m) => !!(m.kept || m.answered || m.ejected);
+const touched = (m) => !!(m.kept || m.answered || m.shared);
 
 const { EMAIL, APP_PASSWORD, IMAP_HOST = 'imap.gmail.com', IMAP_PORT = 993 } = process.env;
 if (!EMAIL || !APP_PASSWORD) {
@@ -154,14 +154,14 @@ app.get('/api/download', async (req, res) => {
   } catch (err) { console.error('download:', err.message); res.status(502).json({ error: err.message }); }
 });
 
-// Mark a thread's payload as ejected (shared / added to calendar) via Gmail label.
-app.post('/api/eject', async (req, res) => {
+// Mark a thread as shared (calendar / download / copy) via Gmail label.
+app.post('/api/share', async (req, res) => {
   try {
     const { uid, uids, on = true } = req.body || {};
     const target = uids && uids.length ? uids : uid;
     if (!target) return res.status(400).json({ error: 'uid(s) required' });
-    await transport.eject(target, on);
-    res.json({ ok: true, target, ejected: on });
+    await transport.share(target, on);
+    res.json({ ok: true, target, shared: on });
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 

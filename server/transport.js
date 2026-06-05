@@ -90,9 +90,9 @@ export class ImapTransport {
             const t = info.get(m.threadId) || {
               category: catOf.get(msg.uid) || 'primary', subject: m.subject,
               fromName: m.fromName, fromDomain: m.fromDomain, fromAddress: m.fromAddress,
-              anyUnread: false, anyKept: false, anyAnswered: false, anyEjected: false, uids: [], latestInbox: 0,
+              anyUnread: false, anyKept: false, anyAnswered: false, anyShared: false, uids: [], latestInbox: 0,
             };
-            t.anyUnread ||= !m.seen; t.anyKept ||= m.kept; t.anyAnswered ||= m.answered; t.anyEjected ||= m.ejected;
+            t.anyUnread ||= !m.seen; t.anyKept ||= m.kept; t.anyAnswered ||= m.answered; t.anyShared ||= m.shared;
             t.uids.push(m.uid);
             if (m.received >= t.latestInbox) { t.latestInbox = m.received; t.fromName = m.fromName; t.fromDomain = m.fromDomain; t.fromAddress = m.fromAddress; t.subject = m.subject; }
             info.set(m.threadId, t);
@@ -158,7 +158,7 @@ export class ImapTransport {
           fromAddress: t.fromAddress,          // full address, for a proper "Name <email>" export
           received: head ? head.received : t.latestInbox,
           seen: !t.anyUnread, kept: t.anyKept, answered: t.anyAnswered,
-          ejected: t.anyEjected, // payload exported out (Gmail label mizzle/ejected) → solid send icon
+          shared: t.anyShared, // shared out (Gmail label mizzle/sent) → solid share icon
           // "responded" = a real conversation whose LATEST message is mine. Requires
           // more than one message — a lone from-me item (e.g. a calendar/booking
           // confirmation sent as you) isn't a reply, so it stays hollow. If they wrote
@@ -252,19 +252,21 @@ export class ImapTransport {
     try { uids = await client.search({ threadId: String(threadId) }, { uid: true }); }
     catch (e) { console.error('thread search:', e.message); }
     if (!uids || !uids.length) return { count: 0, messages: [] };
+    const want = String(threadId);
     const metas = [];
     for await (const msg of client.fetch(uids, {
-      uid: true, flags: true, envelope: true, internalDate: true, bodyStructure: true,
+      uid: true, flags: true, threadId: true, envelope: true, internalDate: true, bodyStructure: true,
     }, { uid: true })) {
-      const m = metaOf(msg, me);
-      delete m.threadId; delete m.subject; delete m.kept; delete m.answered;
-      metas.push(m);
+      metas.push(metaOf(msg, me)); // keep threadId for the membership check below
     }
-    await this.#fillSnippets(client, metas, 'a');
-    metas.sort((a, b) => a.received - b.received);
+    // Guard: only messages that actually belong to THIS Gmail thread and have a real
+    // sender. Drops any stray/senderless ("unknown") message that shouldn't be here.
+    const clean = metas.filter((m) => String(m.threadId) === want && !(m.fromName === 'unknown' && !m.fromAddress));
+    await this.#fillSnippets(client, clean, 'a');
+    clean.sort((a, b) => a.received - b.received);
     return {
-      count: metas.length,
-      messages: metas.map((m) => ({
+      count: clean.length,
+      messages: clean.map((m) => ({
         fromName: m.fromMe ? 'You' : m.fromName,
         fromDomain: m.fromDomain, received: m.received, seen: m.seen, body: m.body, fromMe: m.fromMe,
       })),
@@ -339,15 +341,15 @@ export class ImapTransport {
     return this.#withClient((c) => collect(c, [Number(uid)])); // lone INBOX message
   }
 
-  // Mark a thread's payload as ejected (shared / added to calendar) with a Gmail
-  // label — syncs across devices, unlike a localStorage flag.
-  async eject(uids, on = true) {
+  // Mark a thread as shared (calendar / download / copy) with a Gmail label — syncs
+  // across devices, unlike a localStorage flag. Writes mizzle/sent; on un-share removes
+  // both the new and legacy labels.
+  async share(uids, on = true) {
     const range = (Array.isArray(uids) ? uids : [uids]).filter(Boolean);
     if (!range.length) return { ok: false };
-    return this.#withClient((c) => {
-      const op = on ? c.messageFlagsAdd.bind(c) : c.messageFlagsRemove.bind(c);
-      return op(range, [EJECT_LABEL], { uid: true, useLabels: true });
-    });
+    return this.#withClient((c) => (on
+      ? c.messageFlagsAdd(range, [SENT_LABEL], { uid: true, useLabels: true })
+      : c.messageFlagsRemove(range, [SENT_LABEL, LEGACY_SENT_LABEL], { uid: true, useLabels: true })));
   }
 
   // What happens to a message when it mizzles out of the feed (MIZZLE_TO):
@@ -574,16 +576,18 @@ function metaOf(msg, me) {
     kept: flags.has('\\Flagged'),
     answered: flags.has('\\Answered'),
     fromMe: addr === me,
-    ejected: msg.labels ? msg.labels.has(EJECT_LABEL) : false, // payload exported out (Gmail label)
+    shared: msg.labels ? (msg.labels.has(SENT_LABEL) || msg.labels.has(LEGACY_SENT_LABEL)) : false, // shared out (Gmail label)
     textPart: findTextPart(msg.bodyStructure),
     calPart: findCalendarPart(msg.bodyStructure), // text/calendar (.ics) part, if any
     body: '', image: null, event: null,
   };
 }
 
-// The Gmail label that marks "I've ejected this payload" (shared / added to calendar).
-// Lives in Gmail (syncs across devices) instead of localStorage.
-const EJECT_LABEL = 'mizzle/ejected';
+// Gmail label marking "I shared this out" (calendar / download / copy). Lives in Gmail
+// so the state syncs across devices. mizzle/sent is preferred; mizzle/ejected is the
+// legacy name, still read for backwards compatibility.
+const SENT_LABEL = 'mizzle/sent';
+const LEGACY_SENT_LABEL = 'mizzle/ejected';
 
 // Wrap raw message source(s) into a downloadable bundle: .eml for one, .mbox for many.
 function buildBundle(msgs) {
@@ -597,11 +601,36 @@ function buildBundle(msgs) {
   return { ext: 'mbox', mime: 'application/mbox', content: Buffer.from(parts.join(''), 'utf8') };
 }
 
+// For a path-less URL, a clean label is just the host (no scheme, no trailing slash),
+// e.g. https://hardlinesounds.bandcamp.com/ → "hardlinesounds.bandcamp.com". Returns
+// null when the URL has a path/query/fragment (then a generic label reads better).
+function hostOnlyLabel(url) {
+  const m = /^https?:\/\/([^/?#]+)([^?#]*)?([?#].*)?$/i.exec(url);
+  if (!m) return null;
+  const path = (m[2] || '').replace(/\/+$/, '');
+  return (!path && !m[3]) ? m[1] : null;
+}
+
 function stripHtml(html) {
   return html
     .replace(/<(style|script|head|title)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<blockquote[\s\S]*?<\/blockquote>/gi, ' ') // drop quoted replies
     .replace(/<!--[\s\S]*?-->/g, ' ')
+    // keep link targets so buttons ("Accept", "Confirm"…) stay actionable, but tidily:
+    // <a href="URL">Label</a> → "[Label](URL)" (markdown), which linkify renders as a
+    // clickable "Label" — no long URL clutter. Falls back to "link" when there's no label.
+    // Handles quoted AND unquoted hrefs (Google uses unquoted href=https://c.gle/…).
+    .replace(/<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi, (_m, q1, q2, q3, inner) => {
+      const url = (q1 ?? q2 ?? q3 ?? '').replace(/&amp;/gi, '&').trim();
+      let text = inner.replace(/<[^>]+>/g, ' ').replace(/[[\]]/g, '').replace(/\s+/g, ' ').trim();
+      if (!/^(https?:|mailto:)/i.test(url)) return ` ${text} `;          // #, javascript:, tel: → text only
+      if (text && text.toLowerCase() === url.toLowerCase()) {
+        if (!hostOnlyLabel(url)) return ` ${url} `;                      // url-as-text with a path → show it bare
+        text = '';                                                       // host-only url-as-text → placeholder
+      }
+      if (!text) text = 'link';      // placeholder — dedup prefers real labels, then it's named post-hoc
+      return ` [${text}](${url}) `;
+    })
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
@@ -628,8 +657,31 @@ function cleanBody(text) {
   // drop zero-width chars, trim quoted history, then collapse whitespace; keep the
   // full readable body (bounded) so the card can expand to it via "more".
   const t = trimQuoted(text.replace(/[​‌‍﻿]/g, ''));
-  return t.replace(/[ \t\f\v]+/g, ' ')
-    .replace(/\s*\n\s*/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 4000);
+  const collapsed = t.replace(/[ \t\f\v]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  // dedupe consecutive same-url links, then name any leftover "link" placeholder after
+  // its host when the URL is path-less (e.g. → hardlinesounds.bandcamp.com).
+  const deduped = dedupeLinks(collapsed).replace(/\[link\]\((https?:\/\/[^\s)]+)\)/g, (m, url) => {
+    const h = hostOnlyLabel(url);
+    return h ? `[${h}](${url})` : m;
+  });
+  return deduped.slice(0, 4000);
+}
+
+// HTML emails routinely place two links to the SAME url back-to-back (an icon/image
+// link with no text, then the text link). Collapse consecutive same-url markdown
+// links into one, keeping the most descriptive label (a real label over "link").
+function dedupeLinks(s) {
+  const re = /\[([^\]]*)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)\s*\n?\s*\[([^\]]*)\]\(\2\)/g;
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(re, (_m, a, url, b) => {
+      const label = a === 'link' ? b : b === 'link' ? a : a.length >= b.length ? a : b;
+      return `[${label}](${url})`;
+    });
+  } while (s !== prev);
+  return s;
 }
 
 function gmDate(d) {

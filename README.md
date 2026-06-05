@@ -6,6 +6,10 @@
 
 See [MANIFESTO.md](./MANIFESTO.md) for the why. This repo is the working prototype.
 
+<p align="center">
+  <a href="https://www.producthunt.com/products/mizzle-mail?utm_source=badge-follow&utm_medium=badge&utm_source=badge-mizzle&#0045;mail" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1240140&theme=light" alt="Mizzle&#0032;Mail - Your&#0032;Gmail&#0032;inbox&#0032;as&#0032;an&#0032;Instagram&#0032;feed | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+</p>
+
 <table align="center">
   <tr>
     <td><img src="./screenshots/feed.png" alt="The feed — Check mode" width="200"></td>
@@ -13,7 +17,7 @@ See [MANIFESTO.md](./MANIFESTO.md) for the why. This repo is the working prototy
     <td><img src="./screenshots/thread.png" alt="A thread with inline reply" width="200"></td>
   </tr>
   <tr>
-    <td><img src="./screenshots/eject.png" alt="Eject — calendar, download, or copy" width="200"></td>
+    <td><img src="./screenshots/share.png" alt="Share — calendar, download, or copy" width="200"></td>
     <td><img src="./screenshots/decay.png" alt="Everything decays; caught-up divider" width="200"></td>
     <td><img src="./screenshots/image-card.png" alt="A card with a real image" width="200"></td>
   </tr>

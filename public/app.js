@@ -30,12 +30,18 @@ const esc = (s = '') => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;'
 // so no raw HTML from the email is ever injected. Only http/https/www match, so
 // javascript: etc. can't slip through.)
 function linkify(escaped) {
-  return escaped.replace(/\b(https?:\/\/[^\s<]+|www\.[^\s<]+)/g, (raw) => {
-    const m = raw.match(/^([\s\S]*?)([.,;:!?)\]'"]*)$/); // peel trailing punctuation
-    const url = m[1], tail = m[2] || '';
-    const href = url.startsWith('http') ? url : `http://${url}`;
-    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${url}</a>${tail}`;
-  });
+  // one pass: markdown [label](url) first, then bare URLs. Doing both in a single
+  // alternation avoids the bare matcher re-wrapping the url inside a generated href.
+  const A = (href, label) => `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+  return escaped.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)|\b(https?:\/\/[^\s<]+|www\.[^\s<]+)/g,
+    (m, mdLabel, mdUrl, bare) => {
+      if (mdUrl) return A(mdUrl, mdLabel);
+      const peel = bare.match(/^([\s\S]*?)([.,;:!?)\]'"]*)$/); // peel trailing punctuation
+      const url = peel[1], tail = peel[2] || '';
+      return A(url.startsWith('http') ? url : `http://${url}`, url) + tail;
+    },
+  );
 }
 const initials = (name) => (name || '?').trim().slice(0, 1).toUpperCase() || '?';
 
@@ -151,7 +157,7 @@ function card(it) {
       <button class="act star" title="Like — flag for Write mode">${ICON.heart}</button>
       <button class="act reply${it.responded ? ' responded' : ''}" title="${it.responded ? 'Responded — your reply is the latest message' : (it.count > 1 ? it.count + ' messages · reply' : 'Reply')}">${it.responded ? ICON.commentSolid : ICON.comment}${it.count > 1 ? `<span class="actcount">${it.count}</span>` : ''}</button>
       <span class="share-wrap">
-        <button class="act share${it.ejected ? ' done' : ''}" title="Eject — calendar · share · export">${it.ejected ? ICON.sendSolid : ICON.send}</button>
+        <button class="act share${it.shared ? ' done' : ''}" title="Share">${it.shared ? ICON.sendSolid : ICON.send}</button>
         <div class="ejectmenu" hidden>
           <button data-eject="cal">${ICON.calendar}<span>Add to calendar${it.event && it.event.start ? ` · ${calDateLabel(it.event)}` : ''}</span></button>
           <button data-eject="dl-email">${ICON.download}<span>Download email</span></button>
@@ -316,14 +322,14 @@ function wireCard(el, it) {
   }));
 }
 
-// "Ejected" = the payload has left the pipe (shared / added to calendar). Tracked
-// with a Gmail label (POST /api/eject) so the solid icon syncs across devices.
-function ejectMark(el, it) {
-  if (it.ejected) return;
-  it.ejected = true;
+// "Shared" = the payload has left the pipe (calendar / download / copy). Tracked with a
+// Gmail label (POST /api/share) so the solid share icon syncs across devices.
+function markShared(el, it) {
+  if (it.shared) return;
+  it.shared = true;
   const b = el.querySelector('.act.share');
   if (b) { b.classList.add('done'); b.innerHTML = ICON.sendSolid; }
-  fetch('/api/eject', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, uids: it.uids, on: true }) }).catch(() => {});
+  fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, uids: it.uids, on: true }) }).catch(() => {});
 }
 
 // ---- calendar export: a no-auth Google Calendar "template" URL (no OAuth, no storage)
@@ -358,7 +364,7 @@ function calendarUrl(it) {
 }
 function addToCalendar(el, it) {
   window.open(calendarUrl(it), '_blank', 'noopener');
-  ejectMark(el, it);
+  markShared(el, it);
   toast(it.event && it.event.start ? 'Opening calendar — date prefilled' : 'Opening calendar — set the date');
 }
 
@@ -401,7 +407,7 @@ async function downloadMail(el, it, scope) {
     a.href = url; a.download = `${slug(it.subject)}.${ext}`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    ejectMark(el, it); // payload left the pipe → solid icon
+    markShared(el, it); // payload left the pipe → solid icon
     toast(scope === 'thread' ? 'Thread downloaded' : 'Email downloaded');
   } catch { toast('Download failed'); }
 }
@@ -409,7 +415,7 @@ async function downloadMail(el, it, scope) {
 async function copyClip(el, it) {
   try {
     await navigator.clipboard.writeText(payloadText(it));
-    ejectMark(el, it);
+    markShared(el, it);
     toast('Copied to clipboard');
   } catch { toast('Copy failed'); }
 }

@@ -55,21 +55,9 @@ never make scrolling demand a decision.
 2. **"I need this *thing*"** (a photo, a receipt, a contract) → you don't need the
    *email*, you need the **payload**. **Download or share it.** The email decays anyway.
 
-Saving content **ejects the payload** and lets the message die on schedule. The inbox
+Saving content **sends the payload out** and lets the message die on schedule. The inbox
 never becomes your file vault — that was Gmail's accident (and arguably the genesis of
 Drive). We refuse it by design.
-
-## Decay is a half-life, by type — this is what makes ephemerality *safe*
-
-Not one dumb 60-day timer. A content-aware clock:
-
-| Type | Half-life | Why |
-|---|---|---|
-| OTP / 2FA codes | hours | dead the moment you've used them |
-| Promos / newsletters | days | graze and forget |
-| App / social notifications | days | noise after a glance |
-| Personal threads | ~60d, **reset on reply** | a live conversation shouldn't die mid-sentence |
-| Receipts / contracts / docs | decays too — but **nags you to download first** | their home is your files, not here |
 
 ---
 

@@ -6,9 +6,7 @@
 
 See [MANIFESTO.md](./MANIFESTO.md) for the why. This repo is the working prototype.
 
-<p align="center">
-  <a href="https://www.producthunt.com/products/mizzle-mail?utm_source=badge-follow&utm_medium=badge&utm_source=badge-mizzle&#0045;mail" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1240140&theme=light" alt="Mizzle&#0032;Mail - Your&#0032;Gmail&#0032;inbox&#0032;as&#0032;an&#0032;Instagram&#0032;feed | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
-</p>
+---
 
 <table align="center">
   <tr>
@@ -31,6 +29,10 @@ See [MANIFESTO.md](./MANIFESTO.md) for the why. This repo is the working prototy
 - Two modes: **Check** to graze · **Write** when you're in the mood.
 - Like ❤️️ = filter for "write later".
 - No local state, everything stays synced to Gmail.
+
+<p align="center">
+  <a href="https://www.producthunt.com/products/mizzle-mail?utm_source=badge-follow&utm_medium=badge&utm_source=badge-mizzle&#0045;mail" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1240140&theme=light" alt="Mizzle&#0032;Mail - Your&#0032;Gmail&#0032;inbox&#0032;as&#0032;an&#0032;Instagram&#0032;feed | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+</p>
 
 ## How it works
 

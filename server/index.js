@@ -174,6 +174,21 @@ app.post('/api/keep', async (req, res) => {
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`mizzle relay on http://localhost:${PORT}  (account: ${EMAIL}, cutoff: ${state.cutoff}, mizzle-to: ${MIZZLE_TO})`);
 });
+
+// Graceful shutdown: LOGOUT all IMAP connections so Gmail frees them right away
+// instead of letting them linger and pile up across restarts.
+let closing = false;
+async function shutdown(sig) {
+  if (closing) return;
+  closing = true;
+  console.log(`${sig} — closing IMAP connections…`);
+  const done = transport.close().catch(() => {});
+  server.close();
+  await Promise.race([done, new Promise((r) => setTimeout(r, 5000))]); // don't hang forever
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

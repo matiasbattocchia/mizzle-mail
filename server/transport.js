@@ -191,6 +191,15 @@ export class ImapTransport {
     return this._pool;
   }
 
+  // Gracefully LOGOUT every connection so Gmail frees the slots immediately on
+  // shutdown — otherwise they linger server-side and pile up across restarts.
+  async close() {
+    const conns = [this._ops, ...(this._pool || [])].filter(Boolean);
+    this._ops = null; this._pool = null;
+    await Promise.all(conns.map((c) => Promise.resolve(c.logout?.()).catch(() => { try { c.close?.(); } catch { /* ignore */ } })));
+    try { this._smtp?.close?.(); } catch { /* ignore */ }
+  }
+
   // tag namespaces the body cache per mailbox ('i' INBOX, 'a' All Mail) since
   // IMAP UIDs are per-mailbox and would otherwise collide.
   async #fillSnippets(client, items, tag = 'i') {
@@ -210,6 +219,7 @@ export class ImapTransport {
       try {
         for await (const msg of client.fetch([...map.keys()], { uid: true, bodyParts: [part] }, { uid: true })) {
           const it = map.get(msg.uid);
+          if (!it) continue; // fetch returned a uid we didn't ask for — skip, don't abort the group
           const raw = msg.bodyParts && msg.bodyParts.get(part);
           let body = '', image = null, event = null;
           if (raw) {
@@ -235,6 +245,7 @@ export class ImapTransport {
       try {
         for await (const msg of client.fetch([...map.keys()], { uid: true, bodyParts: [part] }, { uid: true })) {
           const it = map.get(msg.uid);
+          if (!it) continue;
           const raw = msg.bodyParts && msg.bodyParts.get(part);
           if (!raw) continue;
           const ev = parseIcs(decodePart(raw, it.calPart.encoding, it.calPart.charset));

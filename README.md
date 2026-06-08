@@ -63,14 +63,17 @@ open http://localhost:4173
 
 Run your **own** instance. Your Gmail, your server. Mizzle never holds anyone else's mail.
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/matiasbattocchia/mizzle-mail) &nbsp; [![Run on Replit](https://replit.com/badge/github/matiasbattocchia/mizzle-mail)](https://replit.com/github/matiasbattocchia/mizzle-mail)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/matiasbattocchia/mizzle-mail) &nbsp; [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new) &nbsp; [![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com) &nbsp; [![Run on Replit](https://replit.com/badge/github/matiasbattocchia/mizzle-mail)](https://replit.com/github/matiasbattocchia/mizzle-mail)
 
-Set `EMAIL`, `APP_PASSWORD`, and `AUTH_PASSWORD` as the host's env vars.
+Render and Replit are one-click. For **Railway** and **Zeabur**, connect this repo in their dashboard (both auto-detect Node). On all four, set `EMAIL`, `APP_PASSWORD`, and `AUTH_PASSWORD` as the host's env vars.
 
-> [!IMPORTANT] **Set `AUTH_PASSWORD`**
+> [!CAUTION]
 > The web UI has an optional login gate HTTP basic auth. **Username is your `EMAIL`**. It's **on only when `AUTH_PASSWORD` is set**. Set it on any deployed instance, or anyone with the URL can read and act on your inbox. Use a **distinct** password, **not** your `APP_PASSWORD` (that's your Gmail key). Leaving it unset is fine only for local `npm start`.
 
-Notes: free tiers sleep on idle. First load is slow while it wakes. Please be patient. Reload if unresponsive. On hosts with an ephemeral disk the onboarding cutoff (`data/state.json`) re-seeds on each deploy. Adjust `SEED_DAYS` if needed.
+**Notes:**
+- **Sending replies needs outbound SMTP.** Reading (IMAP) works everywhere, but **Render's free tier blocks outbound SMTP**, so replies will fail there — **Railway, Zeabur, or a VPS** allow it. If 465 is blocked, try `SMTP_PORT=587`.
+- Free tiers sleep on idle — first load is slow; be patient, reload if unresponsive.
+- On hosts with an ephemeral disk, the onboarding cutoff (`data/state.json`) re-seeds on each deploy. Adjust `SEED_DAYS` if needed.
 
 ## Configuration (`.env`)
 

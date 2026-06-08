@@ -381,9 +381,13 @@ export class ImapTransport {
 
   #smtp() {
     if (this._smtp) return this._smtp;
+    const port = Number(process.env.SMTP_PORT || 465);
     this._smtp = nodemailer.createTransport({
-      host: 'smtp.gmail.com', port: 465, secure: true,
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port, secure: port === 465, // 465 = implicit TLS, 587 = STARTTLS
       auth: { user: this.config.auth.user, pass: this.config.auth.pass },
+      // fail fast instead of hanging forever when a host blocks outbound SMTP
+      connectionTimeout: 12000, greetingTimeout: 10000, socketTimeout: 20000,
     });
     return this._smtp;
   }

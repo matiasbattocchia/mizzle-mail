@@ -1,10 +1,20 @@
 # Run on Replit.  https://replit.com/github/matiasbattocchia/mizzle-mail
-# In the Secrets (lock icon) panel set: EMAIL, APP_PASSWORD, and AUTH_PASSWORD.
-# ⚠️  AUTH_PASSWORD turns on the login gate (username = your EMAIL). Without it the repl
-#     URL is open to anyone — set it. Use a DISTINCT password, not APP_PASSWORD.
+#
+# Secrets: open the lock-icon "Secrets" panel and add EMAIL, APP_PASSWORD, AUTH_PASSWORD
+# (Replit does NOT prompt for these on import). For a Deployment, add them again under the
+# deployment's own Secrets.
+# ⚠️  AUTH_PASSWORD turns on the login gate (username = your EMAIL). Without it the URL is
+#     open to anyone. Use a DISTINCT password, not APP_PASSWORD.
+
 run = "npm start"
 entrypoint = "server/index.js"
 modules = ["nodejs-20"]
+
+# Deployments need their own run command (the workspace `run` above isn't used there).
+[deployment]
+run = ["npm", "start"]
+deploymentTarget = "gce"   # reserved/always-on VM — keeps the IMAP pool warm.
+                           # "autoscale" also works but scales to zero (cold starts).
 
 [[ports]]
 localPort = 4173

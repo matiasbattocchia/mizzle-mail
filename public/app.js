@@ -53,16 +53,19 @@ function readCache() { try { return JSON.parse(localStorage.getItem('feedCache')
 function writeCache(data) { try { localStorage.setItem('feedCache', JSON.stringify({ categories: data.categories, feed: data.feed })); } catch { /* quota — ignore */ } }
 function setSyncing(on) { document.querySelector('.refresh')?.classList.toggle('syncing', on); }
 
-// Gmail's trick: paint the last-known feed instantly from cache, then refresh
-// from the (slow) IMAP relay in the background and swap in the fresh data.
-async function load() {
-  const cached = readCache();
-  if (cached && cached.feed && cached.feed.length) {
-    if (cached.categories) CAT_ORDER = cached.categories;
-    items = cached.feed;
-    render(); window.scrollTo(0, 0); // instant, from the top
-  } else {
-    showState('pulling fresh mail…');
+// Gmail's trick: on FIRST load, paint the last-known feed instantly from cache, then
+// fetch fresh and swap it in. On a manual refresh the feed is already on screen, so we
+// leave it untouched (no cache re-paint — that caused a blank flicker) until fresh data lands.
+async function load(initial = false) {
+  if (initial) {
+    const cached = readCache();
+    if (cached && cached.feed && cached.feed.length) {
+      if (cached.categories) CAT_ORDER = cached.categories;
+      items = cached.feed;
+      render(); window.scrollTo(0, 0); // instant, from the top
+    } else {
+      showState('pulling fresh mail…');
+    }
   }
   setSyncing(true);
   try {
@@ -78,7 +81,7 @@ async function load() {
     // the UI settles and early mark-as-read calls aren't behind the heavy batch
     setTimeout(prefetchThreads, 1200);
   } catch (e) {
-    if (!cached) showState(`couldn't reach inbox: ${e.message}`);
+    if (!items.length) showState(`couldn't reach inbox: ${e.message}`); // keep the current feed on a failed refresh
   } finally {
     setSyncing(false);
   }
@@ -463,7 +466,7 @@ document.querySelectorAll('.mode').forEach((b) =>
     render();
   })
 );
-document.querySelector('.refresh').addEventListener('click', load);
+document.querySelector('.refresh').addEventListener('click', () => load()); // refresh: no cache re-paint
 
 // close any open eject menu when clicking outside it
 document.addEventListener('click', (e) => {
@@ -487,4 +490,4 @@ document.querySelector('.theme').addEventListener('click', () => {
   applyTheme(THEME_CYCLE[(THEME_CYCLE.indexOf(cur) + 1) % THEME_CYCLE.length]);
 });
 
-load();
+load(true); // first paint: use the cache

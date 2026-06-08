@@ -21,3 +21,7 @@ services:
 # Render injects PORT automatically; the app reads it. Free tier sleeps on idle (cold
 # start) and has an ephemeral disk, so data/state.json (the onboarding cutoff) re-seeds
 # on each deploy — tune SEED_DAYS if that matters to you.
+#
+# SENDING (reply): Render's FREE tier blocks outbound SMTP on 25, 465 AND 587 — replies
+# won't send here regardless of SMTP_PORT. Reading (IMAP) works. To send: upgrade to a
+# paid Render instance (465/587 work; 25 stays blocked), or use Railway/Zeabur/a VPS.

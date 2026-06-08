@@ -1,0 +1,11 @@
+# Run on Replit.  https://replit.com/github/matiasbattocchia/mizzle-mail
+# In the Secrets (lock icon) panel set: EMAIL, APP_PASSWORD, and AUTH_PASSWORD.
+# ⚠️  AUTH_PASSWORD turns on the login gate (username = your EMAIL). Without it the repl
+#     URL is open to anyone — set it. Use a DISTINCT password, not APP_PASSWORD.
+run = "npm start"
+entrypoint = "server/index.js"
+modules = ["nodejs-20"]
+
+[[ports]]
+localPort = 4173
+externalPort = 80

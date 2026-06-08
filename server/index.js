@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ImapTransport, CATEGORIES } from './transport.js';
@@ -49,6 +50,32 @@ const state = loadState();
 const transport = new ImapTransport({ host: IMAP_HOST, port: Number(IMAP_PORT), user: EMAIL, pass: APP_PASSWORD });
 
 const app = express();
+
+// Optional login gate (HTTP basic auth). Enabled only when AUTH_PASSWORD is set, so
+// local `npm start` stays open; set it on any deployed/shared instance. Username is
+// your EMAIL. Use a DISTINCT password — never reuse APP_PASSWORD (that's your Gmail key).
+const AUTH_PASSWORD = process.env.AUTH_PASSWORD;
+const tsEqual = (a, b) => {
+  const x = Buffer.from(String(a)), y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+};
+if (AUTH_PASSWORD) {
+  app.use((req, res, next) => {
+    const [scheme, encoded] = (req.headers.authorization || '').split(' ');
+    if (scheme === 'Basic' && encoded) {
+      const i = Buffer.from(encoded, 'base64').toString('utf8').indexOf(':');
+      const user = Buffer.from(encoded, 'base64').toString('utf8').slice(0, i);
+      const pass = Buffer.from(encoded, 'base64').toString('utf8').slice(i + 1);
+      if (tsEqual(user, EMAIL) && tsEqual(pass, AUTH_PASSWORD)) return next();
+    }
+    res.set('WWW-Authenticate', 'Basic realm="mizzle", charset="UTF-8"');
+    return res.status(401).send('Authentication required');
+  });
+  console.log(`auth: login gate ON (user: ${EMAIL})`);
+} else {
+  console.log('auth: OPEN (no AUTH_PASSWORD set) — fine for localhost, not for a public URL');
+}
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 

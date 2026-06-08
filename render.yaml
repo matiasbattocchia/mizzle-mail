@@ -1,0 +1,23 @@
+# One-click deploy to Render.  https://render.com/deploy?repo=https://github.com/matiasbattocchia/mizzle-mail
+#
+# ⚠️  SET AUTH_PASSWORD or the instance is OPEN — anyone with the URL can read/act on
+#     your inbox. With it set, the UI requires a login (username = your EMAIL).
+services:
+  - type: web
+    name: mizzle
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: EMAIL
+        sync: false          # set in the Render dashboard (your Gmail address)
+      - key: APP_PASSWORD
+        sync: false          # Gmail App Password — set in the dashboard, never commit it
+      - key: AUTH_PASSWORD
+        sync: false          # login gate (username = EMAIL). REQUIRED here; use a DISTINCT password
+      - key: MIZZLE_TO
+        value: inbox         # safe default (just hides decayed mail; moves nothing)
+# Render injects PORT automatically; the app reads it. Free tier sleeps on idle (cold
+# start) and has an ephemeral disk, so data/state.json (the onboarding cutoff) re-seeds
+# on each deploy — tune SEED_DAYS if that matters to you.

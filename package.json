@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Email as an ephemeral feed — your Gmail inbox as a stream that decays. The inbox is a pipe, not a tank. See MANIFESTO.md.",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",

@@ -402,21 +402,36 @@ export class ImapTransport {
     });
     if (!env) throw new Error('message not found');
     const from = (env.from && env.from[0]) || {};
-    const to = from.address;
-    if (!to) throw new Error('no recipient on the original message');
+    const replyTo = (env.replyTo && env.replyTo[0]) || null;
+    const sender = replyTo && replyTo.address ? replyTo : from; // honor Reply-To, else From
+    if (!sender.address) throw new Error('no recipient on the original message');
+
+    // Reply-all: To = the sender; Cc = every other original recipient (To + Cc),
+    // minus me and minus the sender. Dedupe by address, keep display names.
+    const me = (this.config.auth.user || '').toLowerCase();
+    const seen = new Set([me, sender.address.toLowerCase()]);
+    const cc = [];
+    for (const a of [...(env.to || []), ...(env.cc || [])]) {
+      if (!a || !a.address) continue;
+      const low = a.address.toLowerCase();
+      if (seen.has(low)) continue;
+      seen.add(low);
+      cc.push({ name: a.name || undefined, address: a.address });
+    }
     const subject = /^\s*re:/i.test(env.subject || '') ? env.subject : `Re: ${env.subject || ''}`;
     const messageId = env.messageId || undefined;
 
     await this.#smtp().sendMail({
       from: this.config.auth.user,
-      to,
+      to: { name: sender.name || undefined, address: sender.address },
+      cc: cc.length ? cc : undefined,
       subject,
       inReplyTo: messageId,
       references: messageId ? [messageId] : undefined,
       text,
     });
     try { await this.markAnswered(Number(uid)); } catch (e) { console.error('markAnswered:', e.message); }
-    return { to, subject };
+    return { to: sender.address, cc: cc.map((a) => a.address), subject };
   }
 
   async verifySmtp() { return this.#smtp().verify(); }

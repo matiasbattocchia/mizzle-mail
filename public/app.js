@@ -272,7 +272,8 @@ function wireCard(el, it) {
     const orig = btn.innerHTML; btn.disabled = true; btn.textContent = 'sending…';
     try {
       const r = await fetch('/api/reply', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, text }) });
-      if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+      const res = await r.json();
+      if (!r.ok) throw new Error(res.error || r.statusText);
       ta.value = '';
       composer.hidden = true; // close the composer, but KEEP the thread visible…
 
@@ -332,7 +333,7 @@ function markShared(el, it) {
   it.shared = true;
   const b = el.querySelector('.act.share');
   if (b) { b.classList.add('done'); b.innerHTML = ICON.sendSolid; }
-  fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, uids: it.uids, on: true }) }).catch(() => {});
+  fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, uids: it.uids, on: true }) }).catch(() => { });
 }
 
 // ---- calendar export: a no-auth Google Calendar "template" URL (no OAuth, no storage)
@@ -354,7 +355,7 @@ function calendarUrl(it) {
     let e = ev.end && calBasic(ev.end);
     if (!e && s) { // default span: +2h, or next day for all-day
       e = ev.allDay ? calBasic(new Date(new Date(ev.start).getTime() + 864e5).toISOString().slice(0, 10))
-                    : calBasic(new Date(new Date(ev.start).getTime() + 72e5).toISOString());
+        : calBasic(new Date(new Date(ev.start).getTime() + 72e5).toISOString());
     }
     if (s && e) p.set('dates', `${s}/${e}`);
   }
@@ -377,7 +378,7 @@ function setStar(el, it, on, burst) {
   // Like no longer buys time — it's just a flag that surfaces the item in Write mode.
   // The decay cue stays untouched; lifetime is driven by the latest message's date.
   if (on && burst) { const b = el.querySelector('.burst'); b.classList.remove('go'); void b.offsetWidth; b.classList.add('go'); }
-  fetch('/api/keep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, on }) }).catch(() => {});
+  fetch('/api/keep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, on }) }).catch(() => { });
 }
 
 // plain-text rendering of the payload, used by both download and copy
@@ -444,7 +445,7 @@ function markSeen(el) {
   it.seen = true;
   el.classList.add('seen');
   observer.unobserve(el);
-  fetch('/api/seen', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uids: it.uids || [uid] }) }).catch(() => {});
+  fetch('/api/seen', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uids: it.uids || [uid] }) }).catch(() => { });
 }
 
 let toastTimer;

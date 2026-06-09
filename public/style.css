@@ -133,7 +133,8 @@ html, body {
 }
 /* keep avatar/actions from being selected, but let the email text be copied */
 .acct, .actions, .more, .less { user-select: none; }
-.card.seen .heroimg { opacity: .6; }
+/* no per-card "read" styling on purpose — read state is shown by the "caught up"
+   divider (read cards sit below it); dulling the image hurt legibility. */
 
 /* lucide icons */
 .ic { width: 20px; height: 20px; display: block; }

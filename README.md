@@ -43,6 +43,15 @@ public/          vanilla-JS client
 test/            node --test unit tests
 ```
 
+## How actions map to Gmail
+
+Mizzle holds no local state. Every action is a plain Gmail flag or label, so it stays in sync and plays nice with the Gmail web/app:
+
+- **Like** ❤️ → a Gmail ⭐.
+- **Read** → a card marks read after it has been on screen ~0.9 s, synced to Gmail as read.
+- **Share** (calendar / download / copy) → a Gmail label **`mizzle/sent`**.
+- **Reply** → sent over SMTP, lands in your Gmail **Sent**, and marks the thread as answered.
+
 ## Setup
 
 Requires Node 18+ and a Gmail account with **2-Step Verification** on, so you can [mint an App Password](https://myaccount.google.com/apppasswords).
@@ -56,8 +65,6 @@ cp .env.example .env
 npm start
 open http://localhost:4173
 ```
-
-> **Security:** your App Password lives only in `.env`, which is git-ignored — never commit it. Revoke it anytime from your Google account.
 
 ## Deploy (self-host)
 

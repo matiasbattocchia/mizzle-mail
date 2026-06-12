@@ -3,3 +3,11 @@ data/
 node_modules/
 *.log
 .DS_Store
+
+# Google OAuth client secrets — NEVER commit
+client_secret_*.json
+
+# hosted (Cloudflare) build/local artifacts
+hosted/node_modules/
+hosted/.wrangler/
+hosted/.dev.vars

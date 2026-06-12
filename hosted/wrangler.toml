@@ -1,0 +1,41 @@
+# Hosted Mizzle — Cloudflare Worker. See hosted/README.md for full setup.
+#
+# Self-hosting against your OWN Gmail (the main path) does NOT need any of this —
+# it uses server/ with an App Password. This is only for the shared, multi-user,
+# Gmail-API build that a handful of friends sign into with Google.
+
+name = "mizzle"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]   # provides Buffer for mail-text.js / decay.js
+
+# Custom domain route. Set up the zone in Cloudflare first, then:
+#   wrangler deploy
+# (or attach the route in the dashboard). Remove this block to use the
+# *.workers.dev subdomain instead.
+routes = [
+  { pattern = "mizzlemail.com", custom_domain = true }
+]
+
+# D1 (SQLite). Create with `wrangler d1 create mizzle`, paste the id below,
+# then `npm run db:init`.
+[[d1_databases]]
+binding = "DB"
+database_name = "mizzle"
+database_id = "6b3d2b75-959a-49a3-8264-3ed55f989520"
+
+# The dependency-free frontend (shared with the self-hosted relay) is served from
+# ../public. run_worker_first lets the Worker gate every request (so "/" can bounce
+# to /login when there's no session) and reach the files via the ASSETS binding.
+[assets]
+directory = "../public"
+binding = "ASSETS"
+run_worker_first = true
+
+[vars]
+SEED_DAYS = "3"                                  # onboarding cutoff: ignore mail older than this on first login
+OAUTH_REDIRECT = "https://mizzlemail.com/auth/callback"
+# Secrets (set with `wrangler secret put NAME`, never commit):
+#   GOOGLE_CLIENT_ID
+#   GOOGLE_CLIENT_SECRET
+#   SESSION_SECRET        # random 32+ byte string; signs session cookies

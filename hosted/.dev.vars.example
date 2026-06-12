@@ -1,0 +1,8 @@
+# Local secrets for `wrangler dev` (copy to .dev.vars, which is git-ignored).
+# In production these are set with `wrangler secret put NAME` instead.
+GOOGLE_CLIENT_ID="1001973841167-xxxx.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="GOCSPX-xxxx"
+SESSION_SECRET="generate-a-long-random-string"
+# For local dev, point the OAuth redirect at the dev server and add the same URI to
+# the Google client's "Authorized redirect URIs":
+OAUTH_REDIRECT="http://localhost:8787/auth/callback"

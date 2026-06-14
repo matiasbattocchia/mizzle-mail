@@ -176,7 +176,7 @@ export class ImapTransport {
           event: head ? (head.event || null) : null, // {title,start,end,location,allDay} when the sender embedded it
 
         };
-      }).sort((a, b) => b.received - a.received).slice(0, maxItems);
+      }).sort((a, b) => (b.received - a.received) || String(b.uid).localeCompare(String(a.uid))).slice(0, maxItems);
     } finally { /* persistent pool — keep connections warm between loads */ }
   }
 

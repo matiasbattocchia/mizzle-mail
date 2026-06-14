@@ -98,7 +98,9 @@ function caughtUp(stillAliveBelow) {
 function groupsFrom(list) {
   const frag = document.createDocumentFragment();
   for (const cat of CAT_ORDER) {
-    const inCat = list.filter((i) => i.category === cat).sort((a, b) => b.received - a.received);
+    // tiebreak equal timestamps by uid → a total order, so cards never shuffle on reload
+    const inCat = list.filter((i) => i.category === cat)
+      .sort((a, b) => (b.received - a.received) || String(b.uid).localeCompare(String(a.uid)));
     if (!inCat.length) continue;
     const h = document.createElement('div');
     h.className = 'group';
@@ -439,8 +441,8 @@ function observeCards() {
 }
 
 function markSeen(el) {
-  const uid = Number(el.dataset.uid);
-  const it = items.find((i) => i.uid === uid);
+  const uid = el.dataset.uid; // string id (IMAP uid or Gmail message id) — compare as strings
+  const it = items.find((i) => String(i.uid) === uid);
   if (!it || it.seen) return;
   it.seen = true;
   el.classList.add('seen');

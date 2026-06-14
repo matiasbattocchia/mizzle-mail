@@ -129,6 +129,43 @@ export class GmailTransport {
     return await res.json();
   }
 
+  // Run many GET sub-requests in ONE HTTP call via Gmail's batch endpoint (up to 100
+  // per batch). Returns parsed JSON aligned to `paths` order; a failed sub-request → null.
+  // This is what keeps a 60-thread feed to a handful of subrequests instead of ~68.
+  private async batchGet(paths: string[]): Promise<(any | null)[]> {
+    const results: (any | null)[] = new Array(paths.length).fill(null);
+    const CHUNK = 100;
+    for (let start = 0; start < paths.length; start += CHUNK) {
+      const chunk = paths.slice(start, start + CHUNK);
+      const boundary = `mizzle_batch_${start}`;
+      const body = chunk.map((p, i) =>
+        `--${boundary}\r\nContent-Type: application/http\r\nContent-ID: <item-${start + i}>\r\n\r\nGET ${p}\r\n`,
+      ).join('') + `--${boundary}--\r\n`;
+      const res = await fetch('https://gmail.googleapis.com/batch/gmail/v1', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${this.accessToken}`, 'content-type': `multipart/mixed; boundary=${boundary}` },
+        body,
+      });
+      if (!res.ok) throw new Error(`batch ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      const text = await res.text();
+      const ctype = res.headers.get('content-type') || '';
+      const bm = ctype.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+      const respBoundary = ((bm && (bm[1] || bm[2])) || '').trim();
+      if (!respBoundary) throw new Error('batch: no response boundary');
+      for (const part of text.split(`--${respBoundary}`)) {
+        const idm = part.match(/Content-ID:\s*<?response-item-(\d+)>?/i);
+        if (!idm) continue;
+        const statusM = part.match(/HTTP\/\d\.\d (\d{3})/);
+        if (!statusM || statusM[1] !== '200') continue;
+        const bodyStart = part.indexOf('\r\n\r\n', part.indexOf(statusM[0]));
+        if (bodyStart < 0) continue;
+        try { results[Number(idm[1])] = JSON.parse(part.slice(bodyStart + 4).trim()); }
+        catch { /* leave null */ }
+      }
+    }
+    return results;
+  }
+
   // Resolve (and lazily create) the mizzle/sent label so `shared` state lives in Gmail
   // and syncs across devices. Also notes the legacy mizzle/ejected id, if present.
   private async ensureLabels(): Promise<void> {
@@ -152,17 +189,25 @@ export class GmailTransport {
     await this.ensureLabels();
     const after = gmDate(cutoff);
 
-    // Per-category thread ids in the inbox, after the onboarding cutoff. Run in parallel.
-    const catOf = new Map<string, string>();
-    await Promise.all(CATEGORIES.map(async (cat) => {
+    // Per-category thread ids in the inbox, after the onboarding cutoff. Run the
+    // searches in parallel but keep their results in CATEGORIES order (Promise.all
+    // preserves array order regardless of resolution order), then assign each thread
+    // to the FIRST category that claims it — deterministic, not a resolution race.
+    const lists = await Promise.all(CATEGORIES.map(async (cat) => {
       const q = encodeURIComponent(`category:${cat} after:${after} in:inbox`);
       const data = await this.api(`/threads?q=${q}&maxResults=${perCategory}`).catch(() => ({ threads: [] }));
-      for (const t of data.threads || []) if (!catOf.has(t.id)) catOf.set(t.id, cat);
+      return [cat, (data.threads || []) as { id: string }[]] as const;
     }));
+    const catOf = new Map<string, string>();
+    for (const [cat, threads] of lists)
+      for (const t of threads) if (!catOf.has(t.id)) catOf.set(t.id, cat);
     if (!catOf.size) return [];
 
+    // Fetch every candidate thread in ONE batched HTTP call (Gmail batches up to 100
+    // sub-requests per call) — otherwise a per-thread fetch blows past the Worker's
+    // subrequest cap and silently drops threads, making the feed non-idempotent.
     const tids = [...catOf.keys()];
-    const threads = await mapLimit(tids, 8, (tid) => this.getThread(tid));
+    const threads = await this.batchGet(tids.map((t) => `/gmail/v1/users/me/threads/${t}?format=full`));
     const items = [];
     for (let i = 0; i < tids.length; i++) {
       const th = threads[i];
@@ -170,7 +215,11 @@ export class GmailTransport {
       const item = this.threadToFeedItem(tids[i], catOf.get(tids[i])!, th.messages || []);
       if (item) items.push(item);
     }
-    return items.sort((a, b) => b.received - a.received).slice(0, maxItems);
+    // Tiebreak equal timestamps (same-second arrivals are common) by uid so the order
+    // is a total order — identical on every reload, no within-category shuffling.
+    return items
+      .sort((a, b) => (b.received - a.received) || String(b.uid).localeCompare(String(a.uid)))
+      .slice(0, maxItems);
   }
 
   private async getThread(threadId: string): Promise<{ messages: GMessage[] }> {
@@ -238,11 +287,10 @@ export class GmailTransport {
   }
 
   // --- thread expansion -----------------------------------------------------
-  async fetchThread(threadId: string) {
-    let th: { messages?: GMessage[] };
-    try { th = await this.getThread(threadId); } catch { return { count: 0, messages: [] }; }
+  // Chronological, frontend-shaped view of a thread's messages.
+  private threadView(rawMsgs: GMessage[]) {
     const me = this.email;
-    const msgs = (th.messages || []).filter((m) => {
+    const msgs = (rawMsgs || []).filter((m) => {
       const f = parseAddress(header(m, 'From'));
       return f.address || f.name; // drop senderless strays
     });
@@ -265,10 +313,18 @@ export class GmailTransport {
     };
   }
 
+  async fetchThread(threadId: string) {
+    let th: { messages?: GMessage[] };
+    try { th = await this.getThread(threadId); } catch { return { count: 0, messages: [] }; }
+    return this.threadView(th.messages || []);
+  }
+
+  // Many threads at once via ONE batched HTTP call (avoids the per-request subrequest cap).
   async fetchThreads(threadIds: string[]) {
-    const ids = [...new Set(threadIds)].filter(Boolean).slice(0, 40);
+    const ids = [...new Set(threadIds)].filter(Boolean).slice(0, 100);
     const out: Record<string, any> = {};
-    await mapLimit(ids, 8, async (id) => { out[id] = await this.fetchThread(id); });
+    const threads = await this.batchGet(ids.map((id) => `/gmail/v1/users/me/threads/${id}?format=full`));
+    ids.forEach((id, i) => { out[id] = threads[i] ? this.threadView(threads[i].messages || []) : { count: 0, messages: [] }; });
     return out;
   }
 

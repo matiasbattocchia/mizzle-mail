@@ -128,7 +128,10 @@ html, body {
 .card {
   position: relative; margin: 10px 12px;
   background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px;
-  padding: 16px 16px 18px; overflow: hidden;
+  padding: 16px 16px 18px;
+  /* NOTE: no `overflow: hidden` here — it would clip the upward share/eject dropdown on
+     short cards. The two things that needed clipping (the bottom sliver + the heart
+     burst) clip themselves below; the hero image already rounds its own corners. */
   transition: box-shadow var(--transition-base);
 }
 /* keep avatar/actions from being selected, but let the email text be copied */
@@ -227,10 +230,10 @@ html, body {
 
 /* subtle decay sliver at the card's bottom edge */
 /* full-width accent decoration at the card's bottom (NOT a progress bar) */
-.sliver { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; opacity: .9; }
+.sliver { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; opacity: .9; border-radius: 0 0 17px 17px; }
 
 /* double-tap heart burst */
-.burst { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; font-size: 96px; opacity: 0; transform: scale(.4); }
+.burst { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; font-size: 96px; opacity: 0; transform: scale(.4); overflow: hidden; border-radius: 17px; }
 .burst.go { animation: pop .7s ease; }
 @keyframes pop {
   0% { opacity: 0; transform: scale(.4); }

@@ -186,6 +186,7 @@ export function trimQuoted(text) {
     /\bOn\b.{0,160}?\bwrote:/,
     /\bEl\b.{0,160}?\bescribi[óo]:/i,
     /\bLe\b.{0,160}?\ba écrit\s*:/,
+    /\bPada\b.{0,160}?\bmenulis:/i,                 // Indonesian "On … wrote:"
     /-{2,}\s*Original Message\s*-{2,}/i,
     /\bFrom:.{0,80}?\bSent:/is,
     /_{6,}/,

@@ -41,11 +41,21 @@ function header(msg: GMessage, name: string): string {
   return h ? h.value : '';
 }
 
-// "Display Name <addr@host>" | "addr@host" -> { name, address }
+// "Display Name <addr@host>" | "addr@host" -> { name, address }. Forgiving: real From
+// headers can be malformed/doubled (e.g. '"Name <a@b>" <a@b>'), so we grab the LAST
+// angle-bracketed address (the real envelope addr), or any email token, rather than
+// requiring a clean shape — otherwise a brittle match falls back to the whole string
+// as the "address" and our own messages stop matching `me` (→ name+email, not "You").
 function parseAddress(raw: string): { name: string; address: string } {
   if (!raw) return { name: '', address: '' };
-  const m = raw.match(/^\s*(?:"?([^"<]*?)"?\s*)?<([^>]+)>\s*$/);
-  if (m) return { name: (m[1] || '').trim(), address: m[2].trim().toLowerCase() };
+  const angles = [...raw.matchAll(/<([^>]+)>/g)];
+  if (angles.length) {
+    const address = angles[angles.length - 1][1].trim().toLowerCase();
+    const name = raw.slice(0, raw.indexOf('<')).replace(/"/g, '').trim();
+    return { name, address };
+  }
+  const em = raw.match(/[^\s<>@,;]+@[^\s<>@,;]+/);
+  if (em) return { name: raw.replace(em[0], '').replace(/["<>]/g, '').trim(), address: em[0].toLowerCase() };
   return { name: '', address: raw.trim().toLowerCase() };
 }
 

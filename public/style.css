@@ -127,11 +127,17 @@ html, body {
 
 .card {
   position: relative; margin: 10px 12px;
-  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px;
+  border: 1px solid var(--color-border); border-radius: 18px;
+  /* Decay accent = a full-width 3px stripe at the very bottom, painted as a BACKGROUND
+     layer so the card's own border-radius clips it to the rounded corners (a background
+     is always clipped by border-radius). This avoids `overflow: hidden`, which would
+     crop the upward share dropdown. --accent is set per-card in app.js. */
+  --sliver: color-mix(in srgb, var(--accent, transparent) 90%, transparent);
+  background:
+    linear-gradient(var(--sliver), var(--sliver)) bottom / 100% 3px no-repeat,
+    var(--color-surface);
+  background-clip: padding-box;
   padding: 16px 16px 18px;
-  /* NOTE: no `overflow: hidden` here — it would clip the upward share/eject dropdown on
-     short cards. The two things that needed clipping (the bottom sliver + the heart
-     burst) clip themselves below; the hero image already rounds its own corners. */
   transition: box-shadow var(--transition-base);
 }
 /* keep avatar/actions from being selected, but let the email text be copied */
@@ -228,12 +234,8 @@ html, body {
 .decaytime { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 800; letter-spacing: .02em; padding-right: 4px; }
 .decaytime .ic { width: 14px; height: 14px; }
 
-/* subtle decay sliver at the card's bottom edge */
-/* full-width accent decoration at the card's bottom (NOT a progress bar) */
-/* Inset past the 18px corner radius (and aligned to the content padding) with pill
-   ends, so the bar stays within the card's rounded outline. We can't rely on the card
-   clipping it — `.card` has no `overflow: hidden` (that would crop the share dropdown). */
-.sliver { position: absolute; left: 16px; right: 16px; bottom: 2px; height: 3px; opacity: .9; border-radius: 99px; }
+/* The decay accent stripe is painted as a card background layer (see `.card`), so it
+   hugs the rounded bottom corners without needing `overflow: hidden`. */
 
 /* double-tap heart burst */
 .burst { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; font-size: 96px; opacity: 0; transform: scale(.4); overflow: hidden; border-radius: 17px; }

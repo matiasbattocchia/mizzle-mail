@@ -146,6 +146,7 @@ function card(it) {
   const el = document.createElement('article');
   el.className = 'card' + (it.kept ? ' kept' : '') + (it.seen ? ' seen' : '');
   el.dataset.uid = it.uid;
+  el.style.setProperty('--accent', accent); // decay color → bottom stripe (CSS paints it)
 
   const avatar = it.avatar
     ? `<img class="avatar" src="${esc(it.avatar)}" alt="" onerror="this.replaceWith(window.mono('${esc(initials(it.fromName))}','${accent}'))" />`
@@ -188,7 +189,6 @@ function card(it) {
       <button class="send">${ICON.send} Send</button>
     </div>
 
-    <div class="sliver" style="background:${accent}"></div>
     <div class="burst" style="color:${accent}">♥</div>`;
 
   wireCard(el, it);

@@ -230,7 +230,10 @@ html, body {
 
 /* subtle decay sliver at the card's bottom edge */
 /* full-width accent decoration at the card's bottom (NOT a progress bar) */
-.sliver { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; opacity: .9; border-radius: 0 0 17px 17px; }
+/* Inset past the 18px corner radius (and aligned to the content padding) with pill
+   ends, so the bar stays within the card's rounded outline. We can't rely on the card
+   clipping it — `.card` has no `overflow: hidden` (that would crop the share dropdown). */
+.sliver { position: absolute; left: 16px; right: 16px; bottom: 2px; height: 3px; opacity: .9; border-radius: 99px; }
 
 /* double-tap heart burst */
 .burst { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; font-size: 96px; opacity: 0; transform: scale(.4); overflow: hidden; border-radius: 17px; }

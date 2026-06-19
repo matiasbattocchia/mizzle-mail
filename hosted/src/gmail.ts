@@ -139,39 +139,64 @@ export class GmailTransport {
     return await res.json();
   }
 
-  // Run many GET sub-requests in ONE HTTP call via Gmail's batch endpoint (up to 100
-  // per batch). Returns parsed JSON aligned to `paths` order; a failed sub-request → null.
-  // This is what keeps a 60-thread feed to a handful of subrequests instead of ~68.
+  private sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+
+  // ONE batched HTTP call (Gmail batch endpoint). Returns per-input { status, json }
+  // aligned to `paths` order, so the caller can tell a rate-limited 429 from a 200.
+  private async batchOnce(paths: string[]): Promise<{ status: number; json: any | null }[]> {
+    const out = paths.map(() => ({ status: 0, json: null as any }));
+    const boundary = 'mizzle_batch';
+    const body = paths.map((p, i) =>
+      `--${boundary}\r\nContent-Type: application/http\r\nContent-ID: <item-${i}>\r\n\r\nGET ${p}\r\n`,
+    ).join('') + `--${boundary}--\r\n`;
+    const res = await fetch('https://gmail.googleapis.com/batch/gmail/v1', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${this.accessToken}`, 'content-type': `multipart/mixed; boundary=${boundary}` },
+      body,
+    });
+    if (!res.ok) throw new Error(`batch ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const text = await res.text();
+    const bm = (res.headers.get('content-type') || '').match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+    const respBoundary = ((bm && (bm[1] || bm[2])) || '').trim();
+    if (!respBoundary) throw new Error('batch: no response boundary');
+    for (const part of text.split(`--${respBoundary}`)) {
+      const idm = part.match(/Content-ID:\s*<?response-item-(\d+)>?/i);
+      if (!idm) continue;
+      const i = Number(idm[1]);
+      const statusM = part.match(/HTTP\/\d\.\d (\d{3})/);
+      out[i].status = statusM ? Number(statusM[1]) : 0;
+      if (out[i].status === 200) {
+        const bs = part.indexOf('\r\n\r\n', part.indexOf(statusM![0]));
+        if (bs >= 0) { try { out[i].json = JSON.parse(part.slice(bs + 4).trim()); } catch { /* leave null */ } }
+      }
+    }
+    return out;
+  }
+
+  // Fetch many GETs via batched HTTP, THROTTLED under Gmail's per-user quota and
+  // RETRYING rate-limited items. threads.get costs 10 quota units and the cap is
+  // ~250/sec, so a single 74-item batch gets ~half its ops 429'd — the cause of the
+  // feed dropping/shuffling threads. We send ~20 per second and retry 429/5xx items
+  // a few times so every thread eventually lands. Returns JSON aligned to `paths`.
   private async batchGet(paths: string[]): Promise<(any | null)[]> {
     const results: (any | null)[] = new Array(paths.length).fill(null);
-    const CHUNK = 100;
-    for (let start = 0; start < paths.length; start += CHUNK) {
-      const chunk = paths.slice(start, start + CHUNK);
-      const boundary = `mizzle_batch_${start}`;
-      const body = chunk.map((p, i) =>
-        `--${boundary}\r\nContent-Type: application/http\r\nContent-ID: <item-${start + i}>\r\n\r\nGET ${p}\r\n`,
-      ).join('') + `--${boundary}--\r\n`;
-      const res = await fetch('https://gmail.googleapis.com/batch/gmail/v1', {
-        method: 'POST',
-        headers: { authorization: `Bearer ${this.accessToken}`, 'content-type': `multipart/mixed; boundary=${boundary}` },
-        body,
-      });
-      if (!res.ok) throw new Error(`batch ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      const text = await res.text();
-      const ctype = res.headers.get('content-type') || '';
-      const bm = ctype.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
-      const respBoundary = ((bm && (bm[1] || bm[2])) || '').trim();
-      if (!respBoundary) throw new Error('batch: no response boundary');
-      for (const part of text.split(`--${respBoundary}`)) {
-        const idm = part.match(/Content-ID:\s*<?response-item-(\d+)>?/i);
-        if (!idm) continue;
-        const statusM = part.match(/HTTP\/\d\.\d (\d{3})/);
-        if (!statusM || statusM[1] !== '200') continue;
-        const bodyStart = part.indexOf('\r\n\r\n', part.indexOf(statusM[0]));
-        if (bodyStart < 0) continue;
-        try { results[Number(idm[1])] = JSON.parse(part.slice(bodyStart + 4).trim()); }
-        catch { /* leave null */ }
+    let pending = paths.map((p, i) => ({ p, i }));
+    const CHUNK = 20;   // 20 × 10 units = 200/sec, comfortably under the ~250/sec cap
+    const ROUNDS = 4;
+    for (let round = 0; round < ROUNDS && pending.length; round++) {
+      const next: { p: string; i: number }[] = [];
+      for (let s = 0; s < pending.length; s += CHUNK) {
+        if (s > 0 || round > 0) await this.sleep(1100); // one chunk per ~second
+        const group = pending.slice(s, s + CHUNK);
+        const got = await this.batchOnce(group.map((g) => g.p));
+        group.forEach((g, k) => {
+          const r = got[k];
+          if (r.status === 200) results[g.i] = r.json;
+          else if (r.status === 429 || r.status >= 500 || r.status === 0) next.push(g); // retriable
+          // permanent failures (404/403) → leave null
+        });
       }
+      pending = next;
     }
     return results;
   }

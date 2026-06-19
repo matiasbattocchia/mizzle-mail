@@ -62,6 +62,7 @@ async function load(initial = false) {
     if (cached && cached.feed && cached.feed.length) {
       if (cached.categories) CAT_ORDER = cached.categories;
       items = cached.feed;
+      freezePartition();
       render(); window.scrollTo(0, 0); // instant, from the top
     } else {
       showState('pulling fresh mail…');
@@ -75,6 +76,7 @@ async function load(initial = false) {
     if (data.categories) CAT_ORDER = data.categories;
     if (data.mizzleTo) { const el = document.querySelector('.mzto'); if (el) el.textContent = data.mizzleTo; }
     items = data.feed;
+    freezePartition();
     render(); window.scrollTo(0, 0); // fresh mail resets the feed to the top
     writeCache(data);
     // warm every thread in the background so "reply" is instant — slight delay so
@@ -86,6 +88,13 @@ async function load(initial = false) {
     setSyncing(false);
   }
 }
+
+// Snapshot each card's seen-state at load time. The unread/read partition (and the
+// "caught up" divider) is computed from THIS snapshot, not live `seen`, so reading a
+// card — or switching Check↔Write — doesn't reshuffle the feed mid-session. The
+// partition only settles on the next refresh, when this is re-snapshotted.
+function freezePartition() { for (const i of items) i._pseen = i.seen; }
+const partSeen = (i) => (i._pseen === undefined ? i.seen : i._pseen);
 
 function showState(msg) { stateEl.textContent = msg; feedEl.replaceChildren(stateEl); }
 function caughtUp(stillAliveBelow) {
@@ -122,8 +131,8 @@ function render() {
   }
   if (!items.length) { showState('inbox is quiet — nothing fresh'); return; }
 
-  const unread = items.filter((i) => !i.seen);
-  const read = items.filter((i) => i.seen);
+  const unread = items.filter((i) => !partSeen(i));
+  const read = items.filter((i) => partSeen(i));
   const frag = document.createDocumentFragment();
   if (unread.length) frag.appendChild(groupsFrom(unread));
   frag.appendChild(caughtUp(read.length > 0)); // always shown — also holds the legend

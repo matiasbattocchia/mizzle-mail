@@ -16,6 +16,17 @@ import {
 // is Node-only and won't bundle on Workers).
 export const CATEGORIES = ['primary', 'updates', 'social', 'forums', 'promotions'];
 
+// Map a message's Gmail CATEGORY_* labels to our category name. No category label
+// (or CATEGORY_PERSONAL) means Primary — the same buckets the inbox tabs use.
+function categoryOf(msg: { labelIds?: string[] }): string {
+  const labels = msg.labelIds || [];
+  if (labels.includes('CATEGORY_PROMOTIONS')) return 'promotions';
+  if (labels.includes('CATEGORY_SOCIAL')) return 'social';
+  if (labels.includes('CATEGORY_FORUMS')) return 'forums';
+  if (labels.includes('CATEGORY_UPDATES')) return 'updates';
+  return 'primary';
+}
+
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
 interface GHeader { name: string; value: string; }
@@ -220,41 +231,42 @@ export class GmailTransport {
   }
 
   // --- feed -----------------------------------------------------------------
-  async buildFeed({ cutoff, perCategory = 18, maxItems = 50 }: { cutoff: string; perCategory?: number; maxItems?: number }) {
+  async buildFeed({ cutoff, limit = 80 }: { cutoff: string; limit?: number }) {
     await this.ensureLabels();
     const after = gmDate(cutoff);
 
-    // Per-category thread ids in the inbox, after the onboarding cutoff. Run the
-    // searches in parallel but keep their results in CATEGORIES order (Promise.all
-    // preserves array order regardless of resolution order), then assign each thread
-    // to the FIRST category that claims it — deterministic, not a resolution race.
-    const lists = await Promise.all(CATEGORIES.map(async (cat) => {
-      const q = encodeURIComponent(`category:${cat} after:${after} in:inbox`);
-      const data = await this.api(`/threads?q=${q}&maxResults=${perCategory}`).catch(() => ({ threads: [] }));
-      return [cat, (data.threads || []) as { id: string }[]] as const;
-    }));
-    const catOf = new Map<string, string>();
-    for (const [cat, threads] of lists)
-      for (const t of threads) if (!catOf.has(t.id)) catOf.set(t.id, cat);
-    if (!catOf.size) return [];
+    // The most-recent inbox threads after the onboarding cutoff. We list MESSAGES, not
+    // threads: `threads.list` orders by thread age, so an OLD thread with a fresh reply
+    // sorts to the bottom and falls out of the window (a recent reply on a long-running
+    // conversation would silently vanish). `messages.list` is ordered by message date
+    // (newest first), so we dedupe its threadIds to get threads by latest activity.
+    const data = await this.api(`/messages?q=${encodeURIComponent(`in:inbox after:${after}`)}&maxResults=${limit * 3}`)
+      .catch(() => ({ messages: [] }));
+    const seen = new Set<string>();
+    const tids: string[] = [];
+    for (const m of (data.messages || []) as { threadId: string }[]) {
+      if (seen.has(m.threadId)) continue;
+      seen.add(m.threadId);
+      tids.push(m.threadId);
+      if (tids.length >= limit) break;
+    }
+    if (!tids.length) return [];
 
     // Fetch every candidate thread in ONE batched HTTP call (Gmail batches up to 100
     // sub-requests per call) — otherwise a per-thread fetch blows past the Worker's
     // subrequest cap and silently drops threads, making the feed non-idempotent.
-    const tids = [...catOf.keys()];
     const threads = await this.batchGet(tids.map((t) => `/gmail/v1/users/me/threads/${t}?format=full`));
     const items = [];
     for (let i = 0; i < tids.length; i++) {
       const th = threads[i];
       if (!th) continue;
-      const item = this.threadToFeedItem(tids[i], catOf.get(tids[i])!, th.messages || []);
+      const item = this.threadToFeedItem(tids[i], th.messages || []);
       if (item) items.push(item);
     }
     // Tiebreak equal timestamps (same-second arrivals are common) by uid so the order
     // is a total order — identical on every reload, no within-category shuffling.
     return items
-      .sort((a, b) => (b.received - a.received) || String(b.uid).localeCompare(String(a.uid)))
-      .slice(0, maxItems);
+      .sort((a, b) => (b.received - a.received) || String(b.uid).localeCompare(String(a.uid)));
   }
 
   private async getThread(threadId: string): Promise<{ messages: GMessage[] }> {
@@ -278,12 +290,13 @@ export class GmailTransport {
     return { body, image, event };
   }
 
-  private threadToFeedItem(threadId: string, category: string, msgs: GMessage[]) {
+  private threadToFeedItem(threadId: string, msgs: GMessage[]) {
     if (!msgs.length) return null;
     const me = this.email;
     const inbox = msgs.filter((m) => (m.labelIds || []).includes('INBOX'));
     const last = msgs[msgs.length - 1];                 // newest overall (incl. my sent replies)
     const headMsg = inbox.length ? inbox[inbox.length - 1] : last; // the correspondent's latest
+    const category = categoryOf(headMsg);               // from Gmail's CATEGORY_* labels
 
     const lastFrom = parseAddress(header(last, 'From'));
     const fromMe = lastFrom.address === me;

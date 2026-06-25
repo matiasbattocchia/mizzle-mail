@@ -194,10 +194,11 @@ app.post('/api/share', async (req, res) => {
 
 app.post('/api/keep', async (req, res) => {
   try {
-    const { uid, on = true } = req.body || {};
-    if (!uid) return res.status(400).json({ error: 'uid required' });
-    await transport.keep(uid, on);
-    res.json({ ok: true, uid, kept: on });
+    const { uid, uids, on = true } = req.body || {};
+    const target = uids && uids.length ? uids : uid;
+    if (!target) return res.status(400).json({ error: 'uid(s) required' });
+    await transport.keep(target, on);
+    res.json({ ok: true, target, kept: on });
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 

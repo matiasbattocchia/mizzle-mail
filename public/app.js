@@ -358,7 +358,32 @@ function calDateLabel(ev) {
   const d = new Date(ev.start); if (isNaN(d)) return '';
   return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 }
-function calendarUrl(it) {
+// Plain-text thread context shared by "Add to calendar" and "Copy to clipboard":
+// subject, a link back to the Gmail thread, and the last few messages (sender +
+// address + date + body) so a week later you still know what it was about. Bounded —
+// tight for the calendar (rides in a URL param), generous for copy.
+function threadSummary(it, thread, perMsg = 500, total = 2400) {
+  const lines = [];
+  if (it.subject) lines.push(it.subject);
+  if (it.threadUrl) lines.push(it.threadUrl);
+  const msgs = (thread && thread.messages) || [];
+  const recent = msgs.slice(-3); // the 3 most recent, in conversation order
+  if (recent.length) {
+    lines.push('—');
+    for (const m of recent) {
+      const who = m.fromMe ? 'You'
+        : (m.fromAddress ? `${m.fromName} <${m.fromAddress}>` : (m.fromName || 'unknown'));
+      const when = m.received ? new Date(m.received).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+      const body = (m.body || '').replace(/\s+/g, ' ').trim().slice(0, perMsg);
+      lines.push(`${who}${when ? ` · ${when}` : ''}\n${body}`);
+    }
+  } else { // single message / thread not loaded → headline body
+    const body = (it.body || '').replace(/^You:\s*/, '').replace(/\s+/g, ' ').trim().slice(0, perMsg);
+    if (body) lines.push(body);
+  }
+  return lines.join('\n\n').slice(0, total);
+}
+function calendarUrl(it, thread) {
   const ev = it.event || {};
   const p = new URLSearchParams({ action: 'TEMPLATE', text: ev.title || it.subject || 'Event' });
   if (ev.start) {
@@ -371,14 +396,21 @@ function calendarUrl(it) {
     if (s && e) p.set('dates', `${s}/${e}`);
   }
   if (ev.location) p.set('location', ev.location);
-  // mirror Gemini: link back to the source thread in Gmail (durable while it's in All Mail)
-  const src = it.threadId && /^\d+$/.test(String(it.threadId)) ? `https://mail.google.com/mail/u/0/#all/thread-f:${it.threadId}` : '';
-  const details = [src && `Source: ${src}`, (it.body || '').replace(/^You:\s*/, '').slice(0, 800)].filter(Boolean).join('\n\n');
+  const details = threadSummary(it, thread); // tight bounds (URL-safe)
   if (details) p.set('details', details);
   return 'https://calendar.google.com/calendar/render?' + p.toString();
 }
-function addToCalendar(el, it) {
-  window.open(calendarUrl(it), '_blank', 'noopener');
+async function addToCalendar(el, it) {
+  // open the tab synchronously (keeps the click gesture → no popup block), then point
+  // it at the URL once we have the thread for a richer description.
+  const win = window.open('about:blank', '_blank');
+  let thread = it._thread;
+  if (!thread && it.count > 1) {
+    try { thread = await fetchThread(it.threadId); if (thread) it._thread = thread; } catch { /* fall back to headline */ }
+  }
+  const url = calendarUrl(it, thread);
+  if (win && !win.closed) { win.opener = null; win.location.href = url; }
+  else window.open(url, '_blank', 'noopener'); // popup blocked → direct open
   markShared(el, it);
   toast(it.event && it.event.start ? 'Opening calendar — date prefilled' : 'Opening calendar — set the date');
 }
@@ -389,22 +421,11 @@ function setStar(el, it, on, burst) {
   // Like no longer buys time — it's just a flag that surfaces the item in Write mode.
   // The decay cue stays untouched; lifetime is driven by the latest message's date.
   if (on && burst) { const b = el.querySelector('.burst'); b.classList.remove('go'); void b.offsetWidth; b.classList.add('go'); }
-  fetch('/api/keep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, on }) }).catch(() => { });
+  // send all inbox uids: `kept` is true if ANY message is starred, so un-liking must
+  // clear the star from every message in the thread, not just the latest one.
+  fetch('/api/keep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, uids: it.uids || [it.uid], on }) }).catch(() => { });
 }
 
-// plain-text rendering of the payload, used by both download and copy
-function payloadText(it) {
-  const ev = it.event;
-  const from = it.fromAddress ? `${it.fromName} <${it.fromAddress}>`
-    : (it.fromDomain ? `${it.fromName} <@${it.fromDomain}>` : it.fromName);
-  return [
-    `Subject: ${it.subject}`,
-    `From: ${from}`,
-    ev && ev.start ? `Event: ${ev.start}${ev.location ? ` · ${ev.location}` : ''}` : '',
-    '',
-    (it.body || '').replace(/^You:\s*/, ''),
-  ].filter((l) => l !== null && l !== undefined).join('\n').trim();
-}
 function slug(s) { return (s || 'email').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'email'; }
 
 // Download the real raw message source. scope 'email' → this message (.eml);
@@ -428,8 +449,15 @@ async function downloadMail(el, it, scope) {
 }
 
 async function copyClip(el, it) {
+  let thread = it._thread;
+  if (!thread && it.count > 1) {
+    try { thread = await fetchThread(it.threadId); if (thread) it._thread = thread; } catch { /* fall back to headline */ }
+  }
+  const ev = it.event;
+  const head = ev && ev.start ? `Event: ${ev.start}${ev.location ? ` · ${ev.location}` : ''}\n\n` : '';
+  const text = head + threadSummary(it, thread, 4000, 20000); // generous bounds — not a URL
   try {
-    await navigator.clipboard.writeText(payloadText(it));
+    await navigator.clipboard.writeText(text);
     markShared(el, it);
     toast('Copied to clipboard');
   } catch { toast('Copy failed'); }

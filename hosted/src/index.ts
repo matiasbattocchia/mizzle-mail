@@ -215,9 +215,10 @@ app.post('/api/share', async (c) => {
 });
 
 app.post('/api/keep', async (c) => {
-  const { uid, on = true } = await c.req.json().catch(() => ({}));
-  if (!uid) return c.json({ error: 'uid required' }, 400);
-  try { await tx(c).keep(uid, on); return c.json({ ok: true, uid, kept: on }); }
+  const { uid, uids, on = true } = await c.req.json().catch(() => ({}));
+  const target = uids && uids.length ? uids : uid;
+  if (!target) return c.json({ error: 'uid(s) required' }, 400);
+  try { await tx(c).keep(target, on); return c.json({ ok: true, target, kept: on }); }
   catch (err: any) { return c.json({ error: err.message }, 502); }
 });
 

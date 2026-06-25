@@ -155,6 +155,8 @@ export class ImapTransport {
         const head = r.latestUid ? headByUid.get(r.latestUid) : null;
         return {
           threadId: tid,
+          // open the thread in Gmail (X-GM-THRID → thread-f permalink); '' for non-threads
+          threadUrl: /^\d+$/.test(String(tid)) ? `https://mail.google.com/mail/u/0/#all/thread-f:${tid}` : '',
           uid: t.uids[t.uids.length - 1],     // latest inbox uid — card identity + star target
           uids: t.uids,                       // all inbox uids, for marking the thread read
           category: t.category,
@@ -285,7 +287,7 @@ export class ImapTransport {
       count: clean.length,
       messages: clean.map((m) => ({
         fromName: m.fromMe ? 'You' : m.fromName,
-        fromDomain: m.fromDomain, received: m.received, seen: m.seen, body: m.body, fromMe: m.fromMe,
+        fromDomain: m.fromDomain, fromAddress: m.fromAddress, received: m.received, seen: m.seen, body: m.body, fromMe: m.fromMe,
       })),
     };
   }
@@ -324,11 +326,14 @@ export class ImapTransport {
     return this.#withClient((c) => c.messageFlagsAdd(range, ['\\Seen'], { uid: true }));
   }
 
-  async keep(uid, on = true) {
-    return this.#withClient((c) => {
-      const op = on ? c.messageFlagsAdd.bind(c) : c.messageFlagsRemove.bind(c);
-      return op([uid], ['\\Flagged'], { uid: true });
-    });
+  // Like (star) / unlike. `kept` is true if ANY inbox message is flagged, so un-like
+  // must clear \Flagged from every message in the thread; on like, flag the latest.
+  async keep(uids, on = true) {
+    const range = (Array.isArray(uids) ? uids : [uids]).filter(Boolean);
+    if (!range.length) return;
+    return this.#withClient((c) => (on
+      ? c.messageFlagsAdd([range[range.length - 1]], ['\\Flagged'], { uid: true })
+      : c.messageFlagsRemove(range, ['\\Flagged'], { uid: true })));
   }
 
   async markAnswered(uid) {

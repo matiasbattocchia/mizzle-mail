@@ -313,6 +313,7 @@ export class GmailTransport {
 
     return {
       threadId,
+      threadUrl: `https://mail.google.com/mail/u/0/#all/${threadId}`, // open the thread in Gmail
       uid: (inbox.length ? inbox[inbox.length - 1] : last).id, // card identity + star target
       uids: inbox.map((m) => m.id),                            // inbox messages, for marking read
       category,
@@ -352,6 +353,7 @@ export class GmailTransport {
         return {
           fromName: fromMe ? 'You' : (f.name || f.address),
           fromDomain: f.address.split('@')[1] || '',
+          fromAddress: f.address,
           received: Number(m.internalDate) || 0,
           seen: !(m.labelIds || []).includes('UNREAD'),
           body,
@@ -392,11 +394,14 @@ export class GmailTransport {
     return { ok: true };
   }
 
-  async keep(uid: string, on = true) {
-    await this.api(`/messages/${uid}/modify`, {
-      method: 'POST',
-      body: JSON.stringify(on ? { addLabelIds: ['STARRED'] } : { removeLabelIds: ['STARRED'] }),
-    });
+  // Like (star) / unlike. `kept` in the feed is true if ANY inbox message is starred,
+  // so on un-like we must clear STARRED from every message in the thread; on like,
+  // starring the latest is enough (and keeps Gmail tidy).
+  async keep(uids: string | string[], on = true) {
+    const ids = (Array.isArray(uids) ? uids : [uids]).filter(Boolean);
+    if (!ids.length) return { ok: false };
+    if (on) await this.batchModify([ids[ids.length - 1]], ['STARRED'], []);
+    else await this.batchModify(ids, [], ['STARRED']);
     return { ok: true };
   }
 

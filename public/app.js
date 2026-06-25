@@ -186,7 +186,7 @@ function card(it) {
     ${it.count > 1 ? '<div class="thread" hidden></div>' : ''}
     <div class="composer" hidden>
       <textarea placeholder="Reply to ${esc(it.fromName)}…" rows="3"></textarea>
-      <button class="send">${ICON.send} Send</button>
+      <button class="send" title="Send (Ctrl/Cmd+Enter)">${ICON.send} Send</button>
     </div>
 
     <div class="burst" style="color:${accent}">♥</div>`;
@@ -317,6 +317,13 @@ function wireCard(el, it) {
       toast('Couldn’t send: ' + err.message);
     } finally {
       btn.disabled = false; btn.innerHTML = orig;
+    }
+  });
+  // Ctrl/Cmd+Enter sends the reply (the usual chat-app shortcut).
+  composer.querySelector('textarea').addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      el.querySelector('.send').click();
     }
   });
   // share → open the eject menu (calendar · share · export)

@@ -282,7 +282,7 @@ function wireCard(el, it) {
     if (!text) { ta.focus(); return; }
     const orig = btn.innerHTML; btn.disabled = true; btn.textContent = 'sending…';
     try {
-      const r = await fetch('/api/reply', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, text }) });
+      const r = await fetch('/api/reply', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, text, threadId: it.threadId }) });
       const res = await r.json();
       if (!r.ok) throw new Error(res.error || r.statusText);
       ta.value = '';
@@ -351,7 +351,7 @@ function markShared(el, it) {
   it.shared = true;
   const b = el.querySelector('.act.share');
   if (b) { b.classList.add('done'); b.innerHTML = ICON.sendSolid; }
-  fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, uids: it.uids, on: true }) }).catch(() => { });
+  fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, uids: it.uids, on: true, threadId: it.threadId }) }).catch(() => { });
 }
 
 // ---- calendar export: a no-auth Google Calendar "template" URL (no OAuth, no storage)
@@ -430,7 +430,7 @@ function setStar(el, it, on, burst) {
   if (on && burst) { const b = el.querySelector('.burst'); b.classList.remove('go'); void b.offsetWidth; b.classList.add('go'); }
   // send all inbox uids: `kept` is true if ANY message is starred, so un-liking must
   // clear the star from every message in the thread, not just the latest one.
-  fetch('/api/keep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, uids: it.uids || [it.uid], on }) }).catch(() => { });
+  fetch('/api/keep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uid: it.uid, uids: it.uids || [it.uid], on, threadId: it.threadId }) }).catch(() => { });
 }
 
 function slug(s) { return (s || 'email').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'email'; }
@@ -491,7 +491,7 @@ function markSeen(el) {
   it.seen = true;
   el.classList.add('seen');
   observer.unobserve(el);
-  fetch('/api/seen', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uids: it.uids || [uid] }) }).catch(() => { });
+  fetch('/api/seen', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uids: it.uids || [uid], threadId: it.threadId }) }).catch(() => { });
 }
 
 let toastTimer;

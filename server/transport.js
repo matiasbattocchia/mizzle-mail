@@ -60,7 +60,7 @@ export class ImapTransport {
     try { return await this._building; } finally { this._building = null; }
   }
 
-  async #buildFeedInner({ cutoff, perCategory = 18, maxItems = 50 }) {
+  async #buildFeedInner({ cutoff, perCategory = 40, maxItems = 200 }) {
     const lap = () => {};
     const me = (this.config.auth.user || '').toLowerCase();
     const conns = await this.#getPool();
@@ -85,7 +85,7 @@ export class ImapTransport {
       for (const [cat, uids] of catResults)
         for (const uid of uids.slice(-perCategory)) if (!catOf.has(uid)) catOf.set(uid, cat);
 
-      // ALWAYS include liked (starred) inbox messages, even if they fell past a
+      // Safety net for a deep backlog: pull in liked (starred) messages that fell past a
       // category's top-N window — a "like" flags a thread to reply to later (Write
       // queue), so it must not silently drop out when the inbox is busy. Assign each
       // its category from the full (un-sliced) category results, else 'primary'.

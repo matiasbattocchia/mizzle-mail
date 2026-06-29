@@ -129,13 +129,22 @@ app.use('/api/*', async (c, next) => {
 });
 
 const tx = (c: any) => new GmailTransport(c.get('token'), c.get('user').email);
+// Drop a thread's cached feed item after a flag mutation (read/like/share/reply) so the
+// next feed load re-fetches it with the new state.
+const invalidateThread = (c: any, threadId?: string) =>
+  (threadId ? new Store(c.env.DB).invalidateThreads(c.get('user').sub, [String(threadId)]) : Promise.resolve()).catch(() => {});
 
 app.get('/api/feed', async (c) => {
   try {
     const user = c.get('user');
     const now = Date.now();
     const t = tx(c);
-    const msgs = await t.buildFeed({ cutoff: user.cutoff || new Date(now - 3 * 86_400_000).toISOString() });
+    const store = new Store(c.env.DB);
+    const cache = {
+      getMany: (tids: string[]) => store.getCachedThreads(user.sub, tids),
+      putMany: (entries: { threadId: string; latestUid: string; item: any }[]) => store.putCachedThreads(user.sub, entries, now),
+    };
+    const msgs = await t.buildFeed({ cutoff: user.cutoff || new Date(now - 3 * 86_400_000).toISOString(), cache });
     const feed = msgs.map((m: any) => {
       const decay = decayState({ category: m.category, received: m.received, subject: m.subject }, now);
       return {
@@ -178,17 +187,17 @@ app.get('/api/threads', async (c) => {
 });
 
 app.post('/api/seen', async (c) => {
-  const { uid, uids } = await c.req.json().catch(() => ({}));
+  const { uid, uids, threadId } = await c.req.json().catch(() => ({}));
   const target = uids && uids.length ? uids : uid;
   if (!target) return c.json({ error: 'uid(s) required' }, 400);
-  try { await tx(c).markSeen(target); return c.json({ ok: true, target }); }
+  try { await tx(c).markSeen(target); await invalidateThread(c, threadId); return c.json({ ok: true, target }); }
   catch (err: any) { return c.json({ error: err.message }, 502); }
 });
 
 app.post('/api/reply', async (c) => {
-  const { uid, text } = await c.req.json().catch(() => ({}));
+  const { uid, text, threadId } = await c.req.json().catch(() => ({}));
   if (!uid || !text || !String(text).trim()) return c.json({ error: 'uid and text required' }, 400);
-  try { const r = await tx(c).sendReply({ uid, text: String(text) }); return c.json({ ok: true, ...r }); }
+  try { const r = await tx(c).sendReply({ uid, text: String(text) }); await invalidateThread(c, threadId); return c.json({ ok: true, ...r }); }
   catch (err: any) { return c.json({ error: err.message }, 502); }
 });
 
@@ -207,18 +216,18 @@ app.get('/api/download', async (c) => {
 });
 
 app.post('/api/share', async (c) => {
-  const { uid, uids, on = true } = await c.req.json().catch(() => ({}));
+  const { uid, uids, on = true, threadId } = await c.req.json().catch(() => ({}));
   const target = uids && uids.length ? uids : uid;
   if (!target) return c.json({ error: 'uid(s) required' }, 400);
-  try { await tx(c).share(target, on); return c.json({ ok: true, target, shared: on }); }
+  try { await tx(c).share(target, on); await invalidateThread(c, threadId); return c.json({ ok: true, target, shared: on }); }
   catch (err: any) { return c.json({ error: err.message }, 502); }
 });
 
 app.post('/api/keep', async (c) => {
-  const { uid, uids, on = true } = await c.req.json().catch(() => ({}));
+  const { uid, uids, on = true, threadId } = await c.req.json().catch(() => ({}));
   const target = uids && uids.length ? uids : uid;
   if (!target) return c.json({ error: 'uid(s) required' }, 400);
-  try { await tx(c).keep(target, on); return c.json({ ok: true, target, kept: on }); }
+  try { await tx(c).keep(target, on); await invalidateThread(c, threadId); return c.json({ ok: true, target, kept: on }); }
   catch (err: any) { return c.json({ error: err.message }, 502); }
 });
 

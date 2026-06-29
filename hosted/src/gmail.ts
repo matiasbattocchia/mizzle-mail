@@ -29,6 +29,13 @@ function categoryOf(msg: { labelIds?: string[] }): string {
 
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
+// Per-thread feed-item cache (backed by D1 in index.ts). buildFeed reuses an item when
+// the thread's latest inbox message id is unchanged, fetching only what changed.
+export interface FeedCache {
+  getMany(threadIds: string[]): Promise<Map<string, { latestUid: string; item: any }>>;
+  putMany(entries: { threadId: string; latestUid: string; item: any }[]): Promise<void>;
+}
+
 interface GHeader { name: string; value: string; }
 interface GPart {
   mimeType?: string;
@@ -231,50 +238,66 @@ export class GmailTransport {
   }
 
   // --- feed -----------------------------------------------------------------
-  async buildFeed({ cutoff, limit = 80 }: { cutoff: string; limit?: number }) {
+  async buildFeed({ cutoff, limit = 200, cache }: { cutoff: string; limit?: number; cache?: FeedCache }) {
     await this.ensureLabels();
     const after = gmDate(cutoff);
 
-    // The most-recent inbox threads after the onboarding cutoff. We list MESSAGES, not
-    // threads: `threads.list` orders by thread age, so an OLD thread with a fresh reply
-    // sorts to the bottom and falls out of the window (a recent reply on a long-running
-    // conversation would silently vanish). `messages.list` is ordered by message date
-    // (newest first), so we dedupe its threadIds to get threads by latest activity.
-    const data = await this.api(`/messages?q=${encodeURIComponent(`in:inbox after:${after}`)}&maxResults=${limit * 3}`)
+    // List recent inbox MESSAGES (not threads: threads.list orders by thread age, so an
+    // old thread with a fresh reply would fall out of the window). messages.list is
+    // newest-first, so the first time we see a threadId is its latest inbox message —
+    // which we keep as `latestUid` to validate the per-thread cache cheaply.
+    const data = await this.api(`/messages?q=${encodeURIComponent(`in:inbox after:${after}`)}&maxResults=500`)
       .catch(() => ({ messages: [] }));
-    const seen = new Set<string>();
-    const tids: string[] = [];
-    for (const m of (data.messages || []) as { threadId: string }[]) {
-      if (seen.has(m.threadId)) continue;
-      seen.add(m.threadId);
-      tids.push(m.threadId);
-      if (tids.length >= limit) break;
+    const latestUid = new Map<string, string>();
+    const candidates: string[] = [];
+    const inCand = new Set<string>();
+    for (const m of (data.messages || []) as { id: string; threadId: string }[]) {
+      if (!latestUid.has(m.threadId)) latestUid.set(m.threadId, m.id);
+      if (!inCand.has(m.threadId) && candidates.length < limit) { inCand.add(m.threadId); candidates.push(m.threadId); }
     }
 
-    // ALWAYS include liked (starred) inbox threads, even if they've slipped out of the
-    // recency window above. A "like" flags a thread to reply to later (the Write queue),
-    // so it must not vanish just because newer mail pushed it past the top-N — otherwise
-    // your to-do list silently empties when the inbox is busy.
+    // Safety net for a deep backlog: pull in liked (starred) threads that ranked past
+    // the window above so the Write queue never loses one. Whether a thread shows in
+    // Check is decided purely by decay (in index.ts), NOT by the star — so the window
+    // is sized (below) to cover all within-range threads, making this a rare top-up.
     const starred = await this.api(`/messages?q=${encodeURIComponent(`in:inbox is:starred after:${after}`)}&maxResults=100`)
       .catch(() => ({ messages: [] }));
-    for (const m of (starred.messages || []) as { threadId: string }[]) {
-      if (seen.has(m.threadId)) continue;
-      seen.add(m.threadId);
-      tids.push(m.threadId);
+    for (const m of (starred.messages || []) as { id: string; threadId: string }[]) {
+      if (inCand.has(m.threadId)) continue;
+      inCand.add(m.threadId);
+      candidates.push(m.threadId);
+      if (!latestUid.has(m.threadId)) latestUid.set(m.threadId, m.id); // best-effort if past the 500-window
     }
-    if (!tids.length) return [];
+    if (!candidates.length) return [];
 
-    // Fetch every candidate thread in ONE batched HTTP call (Gmail batches up to 100
-    // sub-requests per call) — otherwise a per-thread fetch blows past the Worker's
-    // subrequest cap and silently drops threads, making the feed non-idempotent.
-    const threads = await this.batchGet(tids.map((t) => `/gmail/v1/users/me/threads/${t}?format=full`));
-    const items = [];
-    for (let i = 0; i < tids.length; i++) {
-      const th = threads[i];
-      if (!th) continue;
-      const item = this.threadToFeedItem(tids[i], th.messages || []);
-      if (item) items.push(item);
+    // Cache: reuse a thread's rendered item when its latest inbox message is unchanged;
+    // only re-fetch (and re-render) the threads that actually changed since last load.
+    const cached = cache ? await cache.getMany(candidates) : new Map();
+    const items: any[] = [];
+    const toFetch: string[] = [];
+    for (const tid of candidates) {
+      const c = cached.get(tid);
+      const luid = latestUid.get(tid);
+      if (c && luid && c.latestUid === luid) items.push(c.item); // hit
+      else toFetch.push(tid);
     }
+
+    if (toFetch.length) {
+      // Fetch the changed/new threads in ONE batched HTTP call (Gmail batches up to 100
+      // sub-requests per call), throttled under the per-user quota inside batchGet.
+      const threads = await this.batchGet(toFetch.map((t) => `/gmail/v1/users/me/threads/${t}?format=full`));
+      const puts: { threadId: string; latestUid: string; item: any }[] = [];
+      for (let i = 0; i < toFetch.length; i++) {
+        const th = threads[i];
+        if (!th) continue;
+        const item = this.threadToFeedItem(toFetch[i], th.messages || []);
+        if (!item) continue;
+        items.push(item);
+        puts.push({ threadId: toFetch[i], latestUid: item.uid, item });
+      }
+      if (cache && puts.length) await cache.putMany(puts);
+    }
+
     // Tiebreak equal timestamps (same-second arrivals are common) by uid so the order
     // is a total order — identical on every reload, no within-category shuffling.
     return items

@@ -23,3 +23,16 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_sub ON sessions(sub);
+
+-- thread_cache — rendered feed item per thread, so a feed load only re-fetches the
+-- threads that actually changed (validated by latest_uid, the thread's newest inbox
+-- message id) instead of re-fetching all ~100+ candidates every time. Decay is NOT
+-- cached (recomputed each load); flag-only changes are invalidated on mutation.
+CREATE TABLE IF NOT EXISTS thread_cache (
+  sub        TEXT NOT NULL,           -- -> users.sub
+  thread_id  TEXT NOT NULL,           -- Gmail thread id
+  latest_uid TEXT NOT NULL,           -- newest inbox message id when cached (cache key check)
+  item_json  TEXT NOT NULL,           -- the rendered feed item (sans decay), JSON
+  updated_at INTEGER NOT NULL,        -- epoch ms
+  PRIMARY KEY (sub, thread_id)
+);

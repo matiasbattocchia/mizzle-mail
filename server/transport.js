@@ -85,6 +85,22 @@ export class ImapTransport {
       for (const [cat, uids] of catResults)
         for (const uid of uids.slice(-perCategory)) if (!catOf.has(uid)) catOf.set(uid, cat);
 
+      // ALWAYS include liked (starred) inbox messages, even if they fell past a
+      // category's top-N window — a "like" flags a thread to reply to later (Write
+      // queue), so it must not silently drop out when the inbox is busy. Assign each
+      // its category from the full (un-sliced) category results, else 'primary'.
+      try {
+        const lock = await c0.getMailboxLock('INBOX');
+        let starred = [];
+        try { starred = (await c0.search({ gmailRaw: `is:starred after:${after}` }, { uid: true })) || []; }
+        finally { lock.release(); }
+        for (const uid of starred) {
+          if (catOf.has(uid)) continue;
+          const hit = catResults.find(([, uids]) => uids.includes(uid));
+          catOf.set(uid, hit ? hit[0] : 'primary');
+        }
+      } catch (e) { console.error('starred search:', e.message); }
+
       const info = new Map(); // threadId -> thread summary
       if (catOf.size) {
         const lock = await c0.getMailboxLock('INBOX');

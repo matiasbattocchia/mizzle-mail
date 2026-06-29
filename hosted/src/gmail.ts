@@ -250,6 +250,18 @@ export class GmailTransport {
       tids.push(m.threadId);
       if (tids.length >= limit) break;
     }
+
+    // ALWAYS include liked (starred) inbox threads, even if they've slipped out of the
+    // recency window above. A "like" flags a thread to reply to later (the Write queue),
+    // so it must not vanish just because newer mail pushed it past the top-N — otherwise
+    // your to-do list silently empties when the inbox is busy.
+    const starred = await this.api(`/messages?q=${encodeURIComponent(`in:inbox is:starred after:${after}`)}&maxResults=100`)
+      .catch(() => ({ messages: [] }));
+    for (const m of (starred.messages || []) as { threadId: string }[]) {
+      if (seen.has(m.threadId)) continue;
+      seen.add(m.threadId);
+      tids.push(m.threadId);
+    }
     if (!tids.length) return [];
 
     // Fetch every candidate thread in ONE batched HTTP call (Gmail batches up to 100

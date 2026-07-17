@@ -49,7 +49,8 @@ test('trimQuoted cuts reply chains (English, Spanish, > lines)', () => {
 test('cleanBody trims quotes, collapses whitespace, bounds length', () => {
   const out = cleanBody('Hello   world\n\n\n\nOn Jan 1 Bob wrote:\nold');
   assert.equal(out, 'Hello world');
-  assert.ok(cleanBody('x'.repeat(9000)).length <= 4000);
+  assert.ok(cleanBody('x'.repeat(9000)).length === 9000);   // no longer cut at 4000
+  assert.ok(cleanBody('x'.repeat(20000)).length <= 16000);  // but still bounded
 });
 
 test('extractImage skips tracking pixels and prefers content over logo', () => {

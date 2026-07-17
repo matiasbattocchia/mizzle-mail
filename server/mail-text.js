@@ -196,9 +196,10 @@ export function trimQuoted(text) {
   return text.slice(0, cut).replace(/(\n\s*>.*)+\s*$/g, '');
 }
 
-export function cleanBody(text) {
+export function cleanBody(text, max = 16000) {
   // drop zero-width chars, trim quoted history, then collapse whitespace; keep the
-  // full readable body (bounded) so the card can expand to it via "more".
+  // full readable body (bounded) so a long email reads in full in the thread view and
+  // the card can expand to it via "more". 4000 was too tight (cut real emails mid-word).
   const t = trimQuoted(text.replace(/[​‌‍﻿]/g, ''));
   const collapsed = t.replace(/[ \t\f\v]+/g, ' ')
     .replace(/\s*\n\s*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
@@ -208,7 +209,7 @@ export function cleanBody(text) {
     const h = hostOnlyLabel(url);
     return h ? `[${h}](${url})` : m;
   });
-  return deduped.slice(0, 4000);
+  return deduped.slice(0, max);
 }
 
 // HTML emails routinely place two links to the SAME url back-to-back (an icon/image
